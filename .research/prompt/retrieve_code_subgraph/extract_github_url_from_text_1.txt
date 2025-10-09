@@ -1,0 +1,17 @@
+
+Input:
+# Task
+You carefully read the contents of the “Paper Outline” and select one GitHub link from the “GitHub URLs List” that you think is most relevant to the contents.
+# Constraints
+- Output the index number corresponding to the selected GitHub URL.
+- Be sure to select only one GitHub URL.
+- If there is no related GitHub link, output None.
+# Paper Outline
+The methodology involves a comprehensive empirical study of UNet features in diffusion models, observing minimal variation in encoder features and substantial variation in decoder features across time-steps. Based on this, 'encoder propagation' is proposed, where encoder computation is omitted at 'non-key' time-steps and cached encoder features from a 'key' time-step are reused. This allows 'parallel non-uniform encoder propagation,' where multiple decoder steps are performed concurrently using the same cached encoder features. 'Non-uniform' key time-step selection prioritizes more encoder computations in earlier inference phases. To mitigate texture degradation caused by encoder propagation, a 'prior noise injection' strategy is introduced, combining the initial latent code zT with zt at later time-steps (t < τ) with a small scaling factor α.
+
+# GitHub URLs List
+['https://github.com/deep-floyd/IF', 'https://github.com/facebookresearch/fvcore', 'https://github.com/LuChengTHU/dpm-solver', 'https://github.com/dbolya/tomesd', 'https://github.com/Picsart-AI-Research/Text2Video-Zero', 'https://github.com/lllyasviel/ControlNet', 'https://github.com/google/dreambooth', 'https://github.com/adobe-research/custom-diffusion']
+Output:
+{
+    "index": 2
+}
