@@ -1,0 +1,59 @@
+
+Input:
+You are a researcher in machine learning. Based on the instructions below, please generate a simple new research method with minimal modifications to existing approaches.
+
+# Instructions:
+- Read the research topic described below:
+    diffusion modelの速度改善
+- A list of related prior studies is provided. Each entry contains a summary of its title, main contributions, methodologies, results, and limitations:
+    {
+    "Title": "Faster Diffusion: Rethinking the Role of the Encoder for Diffusion Model Inference",
+    "Main Contributions": "The paper addresses the slow inference time of diffusion models by proposing a novel acceleration method. It empirically finds that UNet encoder features change minimally across time-steps, unlike decoder features which vary substantially. Based on this, the main contributions are: 1) A thorough empirical study of UNet features, highlighting minimal encoder feature variation. 2) A parallel sampling strategy for diffusion models at adjacent time-steps, significantly accelerating denoising without requiring training or fine-tuning. 3) A prior noise injection method to improve high-frequency texture details in generated images. 4) The method's compatibility with existing acceleration techniques like DDIM and DPM-Solver for further inference speedup. This approach achieves substantial speedups (e.g., 41% for Stable Diffusion, 24% for DeepFloyd-IF, 34% for DiT) while maintaining high image generation quality across diverse tasks including text-to-image, text-to-video, personalized generation, and reference-guided generation.",
+    "Methodology": "The core methodology is based on an empirical analysis of UNet features, showing that encoder features change minimally across time-steps while decoder features vary significantly. This insight motivates 'encoder propagation,' where encoder computation is omitted at certain 'non-key' adjacent time-steps, and features from a previous 'key' time-step's encoder are reused as input for the decoder. This enables parallel execution of multiple decoder steps, leading to faster inference. Two strategies for key time-step selection are proposed: uniform (fixed stride) and non-uniform (more key steps initially, fewer later, based on feature change intensity). A 'prior noise injection' strategy is introduced to preserve texture details, combining the initial latent code zT into subsequent latent codes zt (zt = zt + α · zT) from a specific time-step, which demands negligible computational resources.",
+    "Experimental Setup": "The method was evaluated on Stable Diffusion (latent space), DeepFloyd-IF (pixel space), and DiT (transformer-based) diffusion models. Performance was assessed on standard text-to-image generation and extended to text-to-video generation (Text2Video-zero, VideoFusion), personalized image generation (Dreambooth, Custom Diffusion), and reference-guided image generation (ControlNet). For text-to-image, 10K prompts from MS-COCO2017 validation were used for SD and DeepFloyd-IF, and 50K images from 1000 ImageNet class labels for DiT. Feature analysis was based on 100 generated images from MS-COCO 2017. Evaluation metrics included Fréchet Inception Distance (FID) for visual quality, Clipscore for text-image consistency, and computational workload (GFLOPs/image) and sampling time (s/image) for efficiency. A user study with 18 participants involved pairwise comparisons. All experiments were conducted on an A40 GPU (48GB VRAM). The method was combined with existing acceleration techniques like DDIM, DPM-Solver, DPM-Solver++, and ToMe, and compared against DeepCache and CacheMe.",
+    "Limitations": "The approach faces challenges in generating high-quality images when using a very limited number of sampling steps (e.g., 5 steps). Additionally, the paper explicitly states that the proposed parallelization has not yet been explored in combination with network distillation approaches (e.g., Latent Consistency Models, Adversarial Diffusion Distillation), leaving this for future research.",
+    "Future Research Directions": "Future work includes exploring the integration of the proposed parallelization scheme with existing network distillation approaches. Another direction is to incorporate advanced search algorithms, such as NSGA-II, for automatically identifying optimal key time-steps, rather than relying on empirical definition.",
+    "Experiment Code": null,
+    "Experiment Result": null
+}
+- Identify the most promising existing method that can be improved with minimal modifications to its objective function or core algorithm.
+- Propose a new method that requires only small, focused changes to the existing approach (e.g., adding a regularization term, modifying the loss function, or introducing a simple weighting mechanism).
+- Ensure the proposed method can be validated with a simple Python experiment.
+
+# Output content:
+Based on the above analysis, propose a simple new research method that advances the field through minimal but effective modifications. Your output should include:
+
+- open_problems
+    - Identify the key limitation in existing methods that can be addressed with minimal modifications.
+    - Focus on problems that can be solved through simple changes to objective functions or algorithms.
+
+- methods
+    - Describe the minimal modification to the existing method (e.g., adding regularization, modifying loss function).
+    - Explain the theoretical motivation for this change.
+    - Keep the modification simple and focused on the identified problem.
+
+- experimental_setup
+    - Provide a concrete but simple experimental design.
+    - Specify which datasets and evaluation metrics will be used.
+    - Design a straightforward comparison with the base method.
+
+- experimental_code
+    - Output the core Python code implementing the proposed modification.
+    - Focus only on the key changes to the base method.
+    - Keep the code concise and readable.
+
+- expected_result
+    - Describe the expected experimental results and performance improvement over the base method.
+
+- expected_conclusion
+    - Summarize the practical value of the minimal modification.
+    - Explain why this simple change leads to meaningful improvement.
+Output:
+{
+    "open_problems": "Encoder-caching methods (e.g. Faster Diffusion) still lose image quality when the stride between “key” time-steps becomes large (≤10–12 steps are usually safe, larger strides cause blur / artifacts). The root cause is that encoder features, although relatively stable, are not perfectly time invariant. How can we make the encoder features even more consistent so that we can safely reuse them for many more skipped steps and obtain larger speed-ups?",
+    "methods": "Feature Consistency Regularization (FCR)\n1. During (re)training or a short fine-tuning session, add an auxiliary loss that explicitly encourages the encoder feature map to be invariant over time:\n   L_FCR = λ · E_{t,Δ} [ ‖ Enc(x_t) − Enc(x_{t−Δ}) ‖^2 ]\n   where t ~ Uniform(Δ , T), Δ ~ Uniform(1 , Δ_max).\n2. The total loss becomes  L_total = L_denoise + L_FCR.\n3. No network architecture change is required; only an extra forward pass of the encoder on a second, more-noisy latent x_{t−Δ} drawn within the same mini-batch.\n\nTheoretical motivation: If the encoder learns to output nearly identical representations for nearby (or even moderately distant) noise levels, then at inference we can safely reuse a cached encoder feature over more steps (larger stride) without harming the decoder’s conditioning quality. This directly addresses the stride-vs-quality trade-off with a single, simple regularizer.",
+    "experimental_setup": "Model: the open-source Stable Diffusion v1.5 UNet.\nData: 50 k randomly selected LAION-Aesthetics captions & images (10 k training steps are sufficient for a proof-of-concept).\nBaselines:\n  a) Original model + Faster Diffusion sampling with stride 5 (FD-5).\n  b) Original model + Faster Diffusion sampling with stride 10 (FD-10).\nProposed:\n  c) Model fine-tuned with FCR (λ=0.1, Δ_max=10) + Faster Diffusion sampling with stride 10 (FCR-FD-10).\nMetrics: FID (↓) on 30 k MS-COCO validation prompts, CLIPScore (↑), and wall-clock sampling time per image on one RTX-4090 GPU.\nExpectation: (c) keeps FID & CLIPScore close to (a) while matching the speed of (b).",
+    "experimental_code": "# core training snippet (PyTorch)\nimport torch, torch.nn.functional as F\n\nlambda_fcr = 0.1\nD = unet                      # loaded Stable-Diffusion UNet\nenc = lambda feats: feats[\"encoder_hidden_states\"]  # assumes encoder features are returned in dict\n\nfor batch in dataloader:\n    imgs, text = batch\n    z0 = autoencoder.encode(imgs)            # latent\n    t = torch.randint(1, T, (len(z0),), device=z0.device)\n    eps = torch.randn_like(z0)\n    zt = q_sample(z0, t, eps)                # standard diffusion marche\n\n    # main denoising loss\n    out, feats_t = D(zt, t, return_dict=True)\n    loss_main = F.mse_loss(out, eps)\n\n    # second time-step for FCR\n    delta = torch.randint(1, 11, (len(z0),), device=z0.device)\n    t2 = torch.clamp(t - delta, min=1)\n    zt2 = q_sample(z0, t2, eps)\n    _, feats_t2 = D(zt2, t2, return_dict=True, encoder_only=True)  # small extra cost\n\n    loss_fcr = (enc(feats_t) - enc(feats_t2)).pow(2).mean()\n\n    loss = loss_main + lambda_fcr * loss_fcr\n    loss.backward()\n    optimizer.step(); optimizer.zero_grad()",
+    "expected_result": "• FD-5 (baseline):   FID ≈ 6.3,   time ≈ 0.28 s/img.\n• FD-10 (baseline):  FID ≈ 7.9,   time ≈ 0.18 s/img.  (quality drops)\n• FCR-FD-10:         FID ≈ 6.5,   time ≈ 0.18 s/img.\n\nThus the proposed method recovers almost all lost quality while preserving the larger speed-up from the doubled stride.",
+    "expected_conclusion": "A single, easily-implemented regularization term that aligns encoder features across time makes cached-encoder sampling robust to much larger strides. This yields substantial extra acceleration (≈1.5× over already-accelerated FD-5) at virtually no inference-time cost and only a brief fine-tuning cost. The idea is generic and can be plugged into any UNet-based diffusion model or used jointly with other acceleration or distillation techniques."
+}
