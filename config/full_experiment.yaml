@@ -1,0 +1,259 @@
+# config/full_experiment.yaml
+# Complete experiment matrix for exp-2-robust-ablation (three datasets × five
+# schedule variants).
+
+experiments:
+  # ---------------------------------------------------------------------
+  # CIFAR-10 32×32 (UNet32)
+  # ---------------------------------------------------------------------
+  - run_id: cifar10-ase-linear
+    dataset: cifar10_hf
+    model: unet32
+    seed: 42
+    training:
+      epochs: 1
+      batch_size: 128
+      amp: True
+    diffusion:
+      timesteps: 1000
+      beta_schedule: linear
+      lambda_gates: 0.0
+    evaluation:
+      compute_fid: True
+      fid_num_batches: 30
+
+  - run_id: cifar10-auto-ase-lam0.02
+    dataset: cifar10_hf
+    model: unet32
+    seed: 42
+    training:
+      epochs: 1
+      batch_size: 128
+      amp: True
+    diffusion:
+      timesteps: 1000
+      beta_schedule: linear
+      lambda_gates: 0.02
+    evaluation:
+      compute_fid: True
+      fid_num_batches: 30
+
+  - run_id: cifar10-auto-ase-lam0.05
+    dataset: cifar10_hf
+    model: unet32
+    seed: 42
+    training:
+      epochs: 1
+      batch_size: 128
+      amp: True
+    diffusion:
+      timesteps: 1000
+      beta_schedule: linear
+      lambda_gates: 0.05
+    evaluation:
+      compute_fid: True
+      fid_num_batches: 30
+
+  - run_id: cifar10-auto-ase-lam0.10
+    dataset: cifar10_hf
+    model: unet32
+    seed: 42
+    training:
+      epochs: 1
+      batch_size: 128
+      amp: True
+    diffusion:
+      timesteps: 1000
+      beta_schedule: linear
+      lambda_gates: 0.10
+    evaluation:
+      compute_fid: True
+      fid_num_batches: 30
+
+  - run_id: cifar10-auto-ase-70prune-corrupt
+    dataset: cifar10_hf
+    model: unet32
+    seed: 42
+    training:
+      epochs: 1
+      batch_size: 128
+      amp: True
+    diffusion:
+      timesteps: 1000
+      beta_schedule: linear
+      lambda_gates: 0.05
+      corrupt_sigma: 1.1
+      force_prune_perc: 0.7
+    evaluation:
+      compute_fid: True
+      fid_num_batches: 30
+
+  # ---------------------------------------------------------------------
+  # ImageNet-64 (UNet64)
+  # ---------------------------------------------------------------------
+  - run_id: imagenet64-ase-linear
+    dataset: imagenet64
+    model: unet64
+    seed: 43
+    training:
+      epochs: 1
+      batch_size: 128
+      amp: True
+    diffusion:
+      timesteps: 1000
+      beta_schedule: linear
+      lambda_gates: 0.0
+    evaluation:
+      compute_fid: True
+      fid_num_batches: 30
+
+  - run_id: imagenet64-auto-ase-lam0.02
+    dataset: imagenet64
+    model: unet64
+    seed: 43
+    training:
+      epochs: 1
+      batch_size: 128
+      amp: True
+    diffusion:
+      timesteps: 1000
+      beta_schedule: linear
+      lambda_gates: 0.02
+    evaluation:
+      compute_fid: True
+      fid_num_batches: 30
+
+  - run_id: imagenet64-auto-ase-lam0.05
+    dataset: imagenet64
+    model: unet64
+    seed: 43
+    training:
+      epochs: 1
+      batch_size: 128
+      amp: True
+    diffusion:
+      timesteps: 1000
+      beta_schedule: linear
+      lambda_gates: 0.05
+    evaluation:
+      compute_fid: True
+      fid_num_batches: 30
+
+  - run_id: imagenet64-auto-ase-lam0.10
+    dataset: imagenet64
+    model: unet64
+    seed: 43
+    training:
+      epochs: 1
+      batch_size: 128
+      amp: True
+    diffusion:
+      timesteps: 1000
+      beta_schedule: linear
+      lambda_gates: 0.10
+    evaluation:
+      compute_fid: True
+      fid_num_batches: 30
+
+  - run_id: imagenet64-auto-ase-70prune-corrupt
+    dataset: imagenet64
+    model: unet64
+    seed: 43
+    training:
+      epochs: 1
+      batch_size: 128
+      amp: True
+    diffusion:
+      timesteps: 1000
+      beta_schedule: linear
+      lambda_gates: 0.05
+      corrupt_sigma: 1.1
+      force_prune_perc: 0.7
+    evaluation:
+      compute_fid: True
+      fid_num_batches: 30
+
+  # ---------------------------------------------------------------------
+  # LSUN-Bedroom / Stable-Diffusion latent UNet (UNet512_latent)
+  # ---------------------------------------------------------------------
+  - run_id: lsun-ase-linear
+    dataset: lsun_bedroom
+    model: unet512_latent
+    seed: 44
+    training:
+      epochs: 1
+      batch_size: 64
+      amp: True
+    diffusion:
+      timesteps: 1000
+      beta_schedule: linear
+      lambda_gates: 0.0
+    evaluation:
+      compute_fid: True
+      fid_num_batches: 20
+
+  - run_id: lsun-auto-ase-lam0.02
+    dataset: lsun_bedroom
+    model: unet512_latent
+    seed: 44
+    training:
+      epochs: 1
+      batch_size: 64
+      amp: True
+    diffusion:
+      timesteps: 1000
+      beta_schedule: linear
+      lambda_gates: 0.02
+    evaluation:
+      compute_fid: True
+      fid_num_batches: 20
+
+  - run_id: lsun-auto-ase-lam0.05
+    dataset: lsun_bedroom
+    model: unet512_latent
+    seed: 44
+    training:
+      epochs: 1
+      batch_size: 64
+      amp: True
+    diffusion:
+      timesteps: 1000
+      beta_schedule: linear
+      lambda_gates: 0.05
+    evaluation:
+      compute_fid: True
+      fid_num_batches: 20
+
+  - run_id: lsun-auto-ase-lam0.10
+    dataset: lsun_bedroom
+    model: unet512_latent
+    seed: 44
+    training:
+      epochs: 1
+      batch_size: 64
+      amp: True
+    diffusion:
+      timesteps: 1000
+      beta_schedule: linear
+      lambda_gates: 0.10
+    evaluation:
+      compute_fid: True
+      fid_num_batches: 20
+
+  - run_id: lsun-auto-ase-70prune-corrupt
+    dataset: lsun_bedroom
+    model: unet512_latent
+    seed: 44
+    training:
+      epochs: 1
+      batch_size: 64
+      amp: True
+    diffusion:
+      timesteps: 1000
+      beta_schedule: linear
+      lambda_gates: 0.05
+      corrupt_sigma: 1.1
+      force_prune_perc: 0.7
+    evaluation:
+      compute_fid: True
+      fid_num_batches: 20
