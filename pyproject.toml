@@ -1,1 +1,26 @@
-# Please list the required python packages.
+[project]
+name = "auto_ase_experiments"
+version = "0.1.0"
+description = "Common core foundation for Auto-ASE experiments"
+requires-python = ">=3.9"
+authors = [
+  { name="Research Team", email="research@example.com" }
+]
+
+[project.dependencies]
+torch = ">=2.0.0"
+torchvision = "*"
+# Dataset management
+datasets = "*"
+# Utilities
+tqdm = "*"
+pyyaml = "*"
+matplotlib = "*"
+seaborn = "*"
+numpy = "*"
+# Metrics & image handling
+pillow = "*"
+torchmetrics = "*"
+
+[build-system]
+requires = ["setuptools", "wheel"]
