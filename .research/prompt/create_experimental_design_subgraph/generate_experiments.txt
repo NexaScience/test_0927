@@ -63,69 +63,67 @@ RAM：2048 GB
 
 # Current Research Method (Target for Experiment Design)
 {
-    "Open Problems": "Encoder-caching methods (e.g. Faster Diffusion) still lose image quality when the stride between “key” time-steps becomes large (≤10–12 steps are usually safe, larger strides cause blur / artifacts). The root cause is that encoder features, although relatively stable, are not perfectly time invariant. How can we make the encoder features even more consistent so that we can safely reuse them for many more skipped steps and obtain larger speed-ups?",
-    "Methods": "Feature Consistency Regularization (FCR)\n1. During (re)training or a short fine-tuning session, add an auxiliary loss that explicitly encourages the encoder feature map to be invariant over time:\n   L_FCR = λ · E_{t,Δ} [ ‖ Enc(x_t) − Enc(x_{t−Δ}) ‖^2 ]\n   where t ~ Uniform(Δ , T), Δ ~ Uniform(1 , Δ_max).\n2. The total loss becomes  L_total = L_denoise + L_FCR.\n3. No network architecture change is required; only an extra forward pass of the encoder on a second, more-noisy latent x_{t−Δ} drawn within the same mini-batch.\n\nTheoretical motivation: If the encoder learns to output nearly identical representations for nearby (or even moderately distant) noise levels, then at inference we can safely reuse a cached encoder feature over more steps (larger stride) without harming the decoder’s conditioning quality. This directly addresses the stride-vs-quality trade-off with a single, simple regularizer.",
-    "Experimental Setup": "Model: the open-source Stable Diffusion v1.5 UNet.\nData: 50 k randomly selected LAION-Aesthetics captions & images (10 k training steps are sufficient for a proof-of-concept).\nBaselines:\n  a) Original model + Faster Diffusion sampling with stride 5 (FD-5).\n  b) Original model + Faster Diffusion sampling with stride 10 (FD-10).\nProposed:\n  c) Model fine-tuned with FCR (λ=0.1, Δ_max=10) + Faster Diffusion sampling with stride 10 (FCR-FD-10).\nMetrics: FID (↓) on 30 k MS-COCO validation prompts, CLIPScore (↑), and wall-clock sampling time per image on one RTX-4090 GPU.\nExpectation: (c) keeps FID & CLIPScore close to (a) while matching the speed of (b).",
-    "Experimental Code": "# core training snippet (PyTorch)\nimport torch, torch.nn.functional as F\n\nlambda_fcr = 0.1\nD = unet                      # loaded Stable-Diffusion UNet\nenc = lambda feats: feats[\"encoder_hidden_states\"]  # assumes encoder features are returned in dict\n\nfor batch in dataloader:\n    imgs, text = batch\n    z0 = autoencoder.encode(imgs)            # latent\n    t = torch.randint(1, T, (len(z0),), device=z0.device)\n    eps = torch.randn_like(z0)\n    zt = q_sample(z0, t, eps)                # standard diffusion marche\n\n    # main denoising loss\n    out, feats_t = D(zt, t, return_dict=True)\n    loss_main = F.mse_loss(out, eps)\n\n    # second time-step for FCR\n    delta = torch.randint(1, 11, (len(z0),), device=z0.device)\n    t2 = torch.clamp(t - delta, min=1)\n    zt2 = q_sample(z0, t2, eps)\n    _, feats_t2 = D(zt2, t2, return_dict=True, encoder_only=True)  # small extra cost\n\n    loss_fcr = (enc(feats_t) - enc(feats_t2)).pow(2).mean()\n\n    loss = loss_main + lambda_fcr * loss_fcr\n    loss.backward()\n    optimizer.step(); optimizer.zero_grad()",
-    "Expected Result": "• FD-5 (baseline):   FID ≈ 6.3,   time ≈ 0.28 s/img.\n• FD-10 (baseline):  FID ≈ 7.9,   time ≈ 0.18 s/img.  (quality drops)\n• FCR-FD-10:         FID ≈ 6.5,   time ≈ 0.18 s/img.\n\nThus the proposed method recovers almost all lost quality while preserving the larger speed-up from the doubled stride.",
-    "Expected Conclusion": "A single, easily-implemented regularization term that aligns encoder features across time makes cached-encoder sampling robust to much larger strides. This yields substantial extra acceleration (≈1.5× over already-accelerated FD-5) at virtually no inference-time cost and only a brief fine-tuning cost. The idea is generic and can be plugged into any UNet-based diffusion model or used jointly with other acceleration or distillation techniques."
+    "Open Problems": "Adaptive Score Estimation (ASE) accelerates diffusion sampling by skipping UNet/Transformer blocks according to a hand-crafted, time-dependent dropping schedule.  The manual schedule is (1) sub-optimal, (2) model-specific, and (3) labor-intensive to tune.  How can we let the schedule be found automatically while keeping the ASE framework intact and requiring only a few extra lines of code?",
+    "Methods": "Auto-ASE:  Replace the fixed schedule with a tiny, learnable gating function that decides—per time-step t and per network block k—whether the block is executed.  \n1. For every block k add a scalar logit wk (learnable) and define a continuous gate gk(t)=sigmoid(wk·h(t)), where h(t)=1−t (so gates tend to stay open near the data region).  \n2. During training multiply the block output by gk(t).  Use the straight-through estimator (STE) to binarise gk(t) (gk∈{0,1}) at inference time.  \n3. Loss=Lnoise+λ⋅Σk g̅k, where Lnoise is the standard noise-prediction loss and g̅k is the average gate activation over the batch; λ is a small positive constant.  The extra L1 term encourages gates to close, yielding speed-ups.  \n4. No architecture, solver or weight initialisation changes are required; only a few parameters (<100) are added.  Training can be done for a handful of epochs on the original data.",
+    "Experimental Setup": "Model: the public DDPM CIFAR-10 UNet (32×32).\nBaselines: (a) original model, (b) ASE with the paper’s linear schedule, (c) proposed Auto-ASE.\nTraining: fine-tune for 1 epoch on CIFAR-10 with batch 128, AdamW lr=1e-4; λ=0.05.\nEvaluation: 50 sampling steps, measure FID (10 k images) and wall-clock time per image on a single RTX-3090.  Report mean gate activations to show the learned schedule.",
+    "Experimental Code": "import torch, torch.nn as nn\n\nclass GatedBlock(nn.Module):\n    def __init__(self, block):\n        super().__init__()\n        self.block = block\n        self.w = nn.Parameter(torch.zeros(1))  # initial gate ~0.5\n    def forward(self, x, t):\n        gate = torch.sigmoid(self.w * (1. - t).view(-1, 1, 1, 1))\n        if self.training:\n            return x + gate * (self.block(x, t) - x), gate.mean()\n        else:  # STE binarisation\n            hard_gate = (gate > 0.5).float()\n            return x + hard_gate * (self.block(x, t) - x), hard_gate.mean()\n\n# Wrap every UNet residual block with GatedBlock and tally gates in loss\n\ngate_loss_coeff = 0.05\n\nfor x, t, noise in dataloader:\n    pred, gate_stats = model(x, t)   # gate_stats is list of means\n    loss = ((pred - noise)**2).mean() + gate_loss_coeff * torch.stack(gate_stats).sum()\n    loss.backward(); optimizer.step()",
+    "Expected Result": "Auto-ASE is expected to learn a non-uniform schedule that skips ~40-50 % of blocks at noisy time-steps while keeping almost all blocks near t≈0.  Compared with the hand-crafted ASE schedule, it should deliver (1) equal or slightly better FID (≈16 vs 16.5) and (2) an extra 5-10 % reduction in sampling time because the learned schedule is more aggressive where possible and more conservative where necessary.",
+    "Expected Conclusion": "By turning the dropping schedule into a handful of learnable gates plus a sparsity penalty, we remove manual tuning from ASE and obtain a data-driven schedule that generalises across models and datasets.  The modification touches only the loss function and adds negligible parameters, yet it yields measurable speed gains without sacrificing image quality, demonstrating how tiny objective tweaks can meaningfully advance diffusion-model acceleration."
 }
 
 # Experiment Strategy
-Global Experimental Strategy for Validating Feature Consistency Regularization (FCR)
+Goal: Build a single, rigorous experimental play-book that can be applied to every study of Auto-ASE, proving that the learnable gating schedule (a) preserves or improves sample quality, (b) reduces sampling cost, (c) is robust across models, datasets and solvers, and (d) removes the need for manual tuning.
 
-1. Objectives to Validate
-   1.1 Quality-vs-Speed Trade-off: Does FCR maintain image quality while enabling larger sampling strides?  
-   1.2 Computational Efficiency: How much wall-clock speed-up, FLOP reduction and GPU-memory saving are achieved at inference?  
-   1.3 Robustness: Does quality remain stable across random seeds, prompt difficulty, higher resolutions and perturbed noise schedules?  
-   1.4 Generalization: Does the benefit transfer to (i) different diffusion backbones, (ii) different domains (text-to-image, in-painting, depth-to-image) and (iii) different datasets?  
-   1.5 Mechanistic Validation: Does FCR actually reduce temporal variance in encoder features and is this reduction predictive of downstream quality?  
-   1.6 Cost of Adoption: What is the additional training cost and is the inference overhead negligible?
+1. Key hypotheses to validate
+   H1  Performance: Auto-ASE delivers the same or better generative quality than the original network and the hand-crafted ASE schedule.
+   H2  Efficiency: Auto-ASE cuts wall–clock sampling time, FLOPs and GPU energy by at least 20 % versus the full model and beats the best fixed schedule.
+   H3  Robustness & Generalisation: The learned schedule works (without re-tuning) on multiple datasets, resolutions, network backbones and numerical solvers.
+   H4  Simplicity: Training overhead and parameter growth are negligible (<0.5 % extra parameters, <5 % extra training time).
 
-2. Comparison Grid Used in All Experiments
-   Baselines (held fixed across studies):  
-   • Original model with conservative stride (FD-5) → «quality upper-bound».  
-   • Original model with large stride (FD-10/15/20) → «speed upper-bound».  
-   • State-of-the-art accelerators (e.g. DPMSolver++, Latent-Distillation) at matched step counts.  
-   Ablations:  
-   • FCR λ ∈ {0, 0.05, 0.1, 0.2}.  
-   • Δ_max ∈ {5, 10, 20}.  
-   • FCR applied only to early / mid / late UNet blocks.  
-   • One-pass vs two-pass encoder caching.  
-   • Stride sweep: 5, 10, 15, 20.  
-   Combined Methods: FCR + DPMSolver, FCR + Distillation.
+2. Universal comparison set
+   a. Baselines
+      • Full model (no skipping)
+      • Original ASE with its published dropping rule
+   b. State-of-the-art accelerators that keep the backbone intact (e.g. DDIM, DPM-Solver++, PNDM) to show trade-off curves
+   c. Ablations of Auto-ASE
+      • No sparsity loss (λ = 0)
+      • Shared vs individual gates
+      • Different gate shapes h(t)
+      • Soft-gating at inference (no STE)
 
-3. Experimental Angles (each experiment will pick a subset, but the philosophy stays the same)
-   A. Quantitative Quality: FID, CLIPScore, Inception Score, and prompt-conditional precision / recall over ≥30k COCO prompts with 3 seeds.  
-   B. Human Preference: 1k A/B pairs rated on MTurk; significance @95 % CI.  
-   C. Computational Cost: (i) Wall-clock time per image on one A100, (ii) #UNet forward passes, (iii) peak GPU RAM, (iv) added fine-tuning time.  
-   D. Feature Analysis: Variance(Enc(x_t)–Enc(x_{t-Δ})) plotted against Δ for all compared models; Pearson correlation of this variance with FID drop.  
-   E. Stress & Robustness: (i) 1024² images, (ii) out-of-distribution prompts (abstract, medical), (iii) noisy schedules with ε-perturbations, (iv) adversarial latent noise.  
-   F. Cross-Model Transfer: repeat core benchmarks on SD-v2.1, OpenJourney, and a latent video UNet.
+3. Evaluation axes (applied in every experiment)
+   Quantitative quality: FID, KID, IS (for images) or task-specific metrics
+   Qualitative quality: curated sample grids + human Turing test where feasible
+   Efficiency:  (i) average number of executed blocks, (ii) total UNet/Transformer calls, (iii) wall-clock latency, (iv) TFLOPs, (v) peak & average GPU memory, (vi) Joule/1000 images measured by nvidia-smi
+   Robustness: metric distributions across 3 random seeds and across 3 λ values
+   Schedule insight: plots of g_k(t) heat-maps & histogram of closed gates
 
-4. Multi-Perspective Demonstration Plan
-   Phase-0: Reproduce paper numbers on SD-v1.5 (sanity check).  
-   Phase-1 (Controlled): Full ablation grid on SD-v1.5 @512²; collect all metrics A–D.  
-   Phase-2 (Generalization): Repeat best λ, Δ_max settings on two new backbones & two new datasets (ImageNet, Flickr30k); collect metrics A, C, D.  
-   Phase-3 (Combination): Integrate FCR with DPMSolver++ and latent-distillation; benchmark quality & cost (metrics A, C).  
-   Phase-4 (Robustness): Run stress tests (metrics A, B, C).  
-   Phase-5 (Human Study): Crowd-source preference on a mixture of output from Phases 1-4.
+4. Experimental matrix (re-used each time)
+   Tier-1  In-domain sanity: original public UNet × CIFAR-10 × DDPM solver (50 steps)
+   Tier-2  Cross-architecture: replace UNet by DiT-XL/2 or ADM-KD while keeping CIFAR-10
+   Tier-3  Cross-data & resolution: ImageNet-64, LSUN-256, Stable-Diffusion 512×512 latent UNet; keep the same Auto-ASE hyper-parameters
+   Tier-4  Cross-solver: DDIM 25 steps, DPM-Solver++ 15 steps, PLMS 50 steps
+   Tier-5  Stress tests: (i) halve/ double λ, (ii) prune 70 % of blocks, (iii) deploy on corrupted noise schedules
 
-5. Success Criteria (must satisfy all to claim win)
-   • Quality Preservation: For stride 10, ΔFID ≤ +5 % over FD-5 AND ΔCLIPScore ≥ –2 %.  
-   • Speed-up: ≥1.4 × real-time speed-up vs FD-5 at equal quality, with ≤2 % extra VRAM.  
-   • Robustness: Quality drop under stress tests ≤ original model’s drop.  
-   • Generalization: All three backbones pass Quality & Speed criteria.  
-   • Mechanistic Proof: Encoder-feature variance reduced by ≥30 %, with R² ≥0.6 when regressing variance against FID difference.  
-   • Training Overhead: Extra fine-tune compute ≤3 % of full model pre-training compute.
+5. Success criteria (must be met on every Tier-1 & Tier-2 run, and on ≥75 % of Tier-3/4/5 runs)
+   • ΔFID ≤ +0.5 (or KID ≤ +0.002) relative to full model
+   • ≥20 % speed-up vs full model; ≥5 % extra speed-up vs best fixed ASE schedule
+   • <0.5 % parameter growth; <5 % extra training time
+   • For robustness tiers: variance of ΔFID across seeds ≤ 0.8 and no catastrophic failure (FID < ×1.5 of baseline)
 
-6. Practical Considerations
-   • Hardware: every timing number reported on a single NVIDIA A100-80 GB; batch size 1 & 8.  
-   • Reproducibility: 3 random seeds per setting; publish code, hyper-params, and evaluation scripts.  
-   • Statistical Tests: Paired t-test or bootstrap; report 95 % CI for all key metrics.  
-   • Stopping Rule: If any candidate fails Quality Preservation, it is excluded from later phases.
+6. Measurement protocol
+   • All runs on a single NVIDIA A100-80GB, PyTorch compiled with CUDA 11.8 + cuDNN 8.
+   • Disable CPU-GPU overlaps to obtain deterministic timing; average over 1 k samples after 50 warm-ups.
+   • Log with Weights & Biases to expose full metrics, curves and gate heat-maps.
 
-This unified strategy ensures that every subsequent experiment, regardless of model or dataset, is anchored to the same validation axes, comparison baselines, measurement tools, and success thresholds, enabling a coherent narrative of FCR’s effectiveness from empirical performance down to mechanistic evidence.
+7. Reporting template (identical for all papers/sections)
+   Table 1  Quality & efficiency metrics for Baselines vs Auto-ASE
+   Figure 1 Trade-off curve: FID vs wall-clock time
+   Figure 2 Gate activation heat-map g_k(t)
+   Table 2 Ablation results
+   Appendix: energy profile & hardware counters
+
+By adhering to this uniform strategy, each experiment will systematically attack the four key hypotheses with controlled baselines, rich metrics and clear success thresholds, allowing reviewers to judge Auto-ASE’s effectiveness from multiple, reproducible perspectives.
 
 ---
 
@@ -136,39 +134,38 @@ Output:
 {
     "experiments": [
         {
-            "experiment_id": "exp-1-main-ablation",
+            "experiment_id": "exp-1-main-perf-eff",
             "run_variations": [
-                "FD-5-baseline",
-                "FD-10-baseline",
-                "FCR(λ=0.05)-FD-10",
-                "FCR(λ=0.10)-FD-10",
-                "FCR(λ=0.20)-FD-10"
+                "full-ddpm",
+                "ase-linear",
+                "auto-ase",
+                "auto-ase-soft",
+                "auto-ase-no-sparsity"
             ],
-            "description": "Objective / hypothesis: Quantify the quality-vs-speed trade-off introduced by Feature Consistency Regularisation (FCR) on the reference Stable-Diffusion-v1.5 UNet and determine the optimal λ by full ablation.  \n\nModels: Stable-Diffusion-v1.5 UNet; no-change architecture.  \n\nDatasets:  \n• Fine-tune: 50 k LAION-Aesthetics (same captions, 512² images).  \n• Evaluation: 30 k MS-COCO validation prompts (text-only, identical subset for every run).  \n\nPre-processing:  \n• Resize / center-crop 512²; random horizontal flip (p=0.5) at training; deterministic center-crop at eval.  \n• Captions lower-cased, tokenised with SD tokenizer (77 tokens, padded).  \n\nSplit / repetitions:  \n• No explicit val split (few-step fine-tune); metrics are computed on held-out COCO prompts.  \n• 3 random seeds per variation; report mean ±95 % CI.  \n• Early-stopping on best moving-average FID over a 3 k prompt mini-val set (checked every 500 steps); otherwise 10 k steps max.  \n\nEvaluation metrics:  \nPrimary – FID↓, CLIPScore↑.  \nSecondary – Inception Score↑, wall-clock sampling time per image, #UNet forward passes, peak VRAM, theoretical FLOPs (ptflops).  \n\nComparisons:  \n• FD-5 (quality upper-bound) vs FD-10 (speed upper-bound).  \n• State-of-the-art DPMSolver++ (20 steps) reported as reference line only (not a run_variation).  \n\nHyper-parameter analysis: grid λ∈{0.05,0.1,0.2}; Δ_max fixed to 10 (empirically safe). Learning-rate 1 e-5, batch 128, AdamW (β1=0.9, β2=0.999).  \n\nRobustness inside this experiment: stride sweep already captures quality decay; we additionally report encoder-feature variance σ²_Δ for Δ={1…10}.  \n\nEfficiency measurements: `torch.cuda.Event` for time; `torch.cuda.memory_allocated()` for VRAM; FLOPs via fvcore; cost estimated from A100 price list.  \n\nExample code snippet (evaluation – timing & FID).\n```python\nimport torch, time, PIL, torchvision.transforms as T\nfrom cleanfid import fid\nfrom diffusers import StableDiffusionPipeline\n\ndef timed_sample(pipe, prompt):\n    t0=time.time()\n    img=pipe(prompt,num_inference_steps=25).images[0]\n    dt=time.time()-t0\n    return img,dt\npipe=StableDiffusionPipeline.from_pretrained(checkpoint,torch_dtype=torch.float16).to(\"cuda\")\npipe.set_progress_bar_config(disable=True)\nlatencies,imgs=[],[]\nfor p in prompts:\n    img,dt=timed_sample(pipe,p)\n    latencies.append(dt); imgs.append(img)\nprint(f\"mean time {sum(latencies)/len(latencies):.3f}s\")\nfid_score=fid.compute_fid(imgs,gt_path=\"coco_val_30k\")\n```\n\nResource budget: ≤40 GPU-hours per variation (fine-tune + eval) → 200 GPU-hours total, fits on one A100 with 80 GB.  \n\nSuccess criterion for exp-1: the best λ configuration must keep ΔFID ≤+5 % vs FD-5 while achieving ≥1.4 × speed-up."
+            "description": "Objective / hypothesis: Validate H1 (quality) and H2 (efficiency) on Tier-1 (CIFAR-10 32×32) and Tier-2 (cross-architecture on DiT-XL/2).\n\nModels:\n • DDPM public UNet-32 (baseline backbone)\n • DiT-XL/2 (Transformer backbone, 32×32) for cross-architecture check\n\nDatasets:\n • CIFAR-10 (train 45k / val 5k / test 10k). No label-conditioning.\nPre-processing: random horizontal flip 0.5, map to [-1,1], no resize. Stats cached in .npy to avoid CPU bottleneck.\n\nData split & repetition: 3 random seeds. Train on train set, validate on val every 2 K iters, early-stop on best-val FID. Report test metrics averaged over seeds ± σ.\n\nRun variations:\n 1. full-ddpm – original UNet, 50 sampling steps.\n 2. ase-linear – hand-crafted dropping rule from ASE paper (same #steps).\n 3. auto-ase – proposed learnable gates + STE at inference, λ=0.05.\n 4. auto-ase-soft – gates kept continuous (no STE) at inference to probe quality/latency trade-off.\n 5. auto-ase-no-sparsity – λ=0, tests necessity of L1 regulariser.\nAll runs fine-tune 1 epoch with AdamW lr=1e-4, batch 128.\n\nEvaluation metrics:\n Primary – FID (10 k test images), KID (×10³), IS.\n Secondary – avg. executed blocks, wall-clock latency/img, TFLOPs/img (torch.profiler), peak GPU-mem, nvidia-smi energy (J).\n\nEfficiency accounting: collect CUDA events over 1 k samples after 50 warm-ups; disable cudnn benchmarking.\n\nComputational cost: record train time/epoch and extra params (%).\n\nHyper-parameter probe: additional grid lr∈{5e-5,1e-4,2e-4} for auto-ase (reported in appendix).\n\nExample code snippet (partial):\n```\nwith torch.autocast('cuda'):\n    start = torch.cuda.Event(enable_timing=True)\n    end   = torch.cuda.Event(enable_timing=True)\n    start.record(); imgs = sampler(model, 50); end.record();\n    torch.cuda.synchronize(); elapsed_ms = start.elapsed_time(end)\n```\n\nSuccess criteria: ΔFID ≤+0.5 vs full, ≥20 % speed-up vs full, ≥5 % vs ase-linear. Results populate Table 1, Fig. 1 trade-off, Fig. 2 heat-map.\n\nBranch: feature/exp-1-main-perf-eff"
         },
         {
-            "experiment_id": "exp-2-generalisation-robustness",
+            "experiment_id": "exp-2-robust-ablation",
             "run_variations": [
-                "SD2.1-FD-5",
-                "SD2.1-FCR(λ=0.10)-FD-10",
-                "SD2.1-FCR(λ=0.10)+DPMSolver-FD-10",
-                "OpenJourney-FD-5",
-                "OpenJourney-FCR(λ=0.10)-FD-10"
+                "ase-linear",
+                "auto-ase-lam0.02",
+                "auto-ase-lam0.05",
+                "auto-ase-lam0.10",
+                "auto-ase-70prune-corrupt"
             ],
-            "description": "Objective / hypothesis: Test whether the benefits of FCR transfer to newer backbones and remain stable under resolution up-scaling, schedule perturbations, and adversarial latent noise. Also quantify the incremental gain when combined with DPMSolver++.  \n\nModels:  \n• Stable-Diffusion-v2.1 UNet (SD2.1).  \n• OpenJourney checkpoint (public SD-v1 derivative heavily fine-tuned on artistic data).  \n• DPMSolver++ sampler (20 steps) in one variation.  \n\nDatasets:  \n• Fine-tune: same 50 k LAION-Aesthetics for SD2.1; 40 k ArtBench-10 for OpenJourney to avoid forgetting (class-balanced).  \n• Evaluation:  \n  – Text-to-image: 30 k Flickr30k captions (diverse, human-written).  \n  – Class-conditional: 50 k ImageNet-1k val labels converted to prompts (\"a photo of a {class}\").  \n\nPre-processing: identical resizing; additionally generate a 1024² set by super-res rescaling prompts.  \n\nSplits / seeds: 3 random seeds; early-stop on moving FID same as exp-1.  \n\nRobustness protocol:  \n• Resolution: run each variation at 512² and 1024².  \n• Noise schedule perturbation: add ε∼N(0,0.05) to each σ_t during sampling.  \n• Adversarial noise: run Fast-Gradient-Sign on latent z0 (ε=0.1) for 10 steps; measure FID.  \n\nEvaluation metrics:  \nPrimary – FID, CLIPScore.  \nSecondary – image-pair human preference (A/B on 1 k pairs using Crowd-MTurk), feature variance σ²_Δ, RMSE of CLIP embedding drift, speed/VRAM/FLOPs.  \nPairwise statistical test: two-sided paired t-test (α=0.05).  \n\nHyper-parameter sensitivity: only λ swept in exp-1; here fixed λ=0.10 but we sweep stride {5,10,15} in a micro-study on SD2.1-FCR to confirm stability (reported in appendix).  \n\nMechanistic check: Pearson R between σ²_Δ and FID across all robustness scenarios; expect R²≥0.6.  \n\nComputation tracking: We log `torch.cuda.memory_summary()`, FLOPs via fvcore, wall-time with NVTX ranges; exported as CSV per run.  \n\nExample robustness code (noise schedule perturbation):\n```python\ndef noisy_sampler(pipe,prompt,steps,eps_std=0.05):\n    latents=pipe.prepare_latents(prompt)\n    for i,t in enumerate(timesteps):\n        sigma = scheduler.sigmas[i]*(1+torch.randn(1,device='cuda')*eps_std)\n        latents = pipe.unet(latents, sigma)  # simplified\n    return pipe.decode(latents)\n```\n\nResource budget: ~60 GPU-hours per variation (fine-tune + multi-scenario eval) ⇒ 300 GPU-hours, still below 2 days on one A100.  \n\nSuccess criteria for exp-2: (i) Every FCR variation matches FD-5 quality within +5 % FID at both resolutions while giving ≥1.4 × speed-up; (ii) quality drop under adversarial noise ≤ drop of corresponding baseline; (iii) positive transfer confirmed on both backbones."
+            "description": "Objective / hypothesis: Stress-test H3 (robustness/generalisation) and H4 (simplicity) across data resolutions, solvers and extreme pruning.\n\nModels:\n • DDPM UNet-32 (CIFAR-10)\n • ADM-KD UNet-64 (ImageNet-64)\n • Stable-Diffusion-v1.5 latent UNet-512 (LSUN-bedrooms 256×256 → 512 latent) – zero-shot schedule transfer, no re-training.\n\nDatasets & preprocessing:\n 1. CIFAR-10 (as exp-1)\n 2. ImageNet-64 subset of 1.28 M imgs – center-crop-resize 64×64, scale [-1,1].\n 3. LSUN-bedrooms 256×256 – center-crop-resize 512×512 latent space.\nSplits: official train/val/test where available; else 95 %/5 % for LSUN train/val, test withheld 10 k.\n\nSolvers:\n • DDIM-25 steps\n • DPM-Solver++(2M)-15 steps\n • PLMS-50 steps\n\nRun variations (evaluated on ALL models/solvers):\n 1. ase-linear – fixed schedule baseline (re-tuned per resolution)\n 2. auto-ase-lam0.02 – milder sparsity\n 3. auto-ase-lam0.05 – default\n 4. auto-ase-lam0.10 – aggressive sparsity\n 5. auto-ase-70prune-corrupt – force 70 % blocks closed and corrupt noise schedule (+10 % σ) to simulate OOD.\n\nTraining protocol:\n • Fine-tune gates for 0.5 epoch on each dataset (≤5 % overhead), same optimizer.\n • For transfer runs (Stable-Diffusion) reuse gates learned on ImageNet-64, no additional updates.\n\nMetrics:\n Quality – FID/KID/IS (images ≤256), CLIP-score (512 latent) for SD.\n Robustness – variance over 3 seeds; ΔFID distribution across solvers.\n Efficiency – as in exp-1 plus GPU memory/time on larger models.\n Calibration – ECE of predicted noise vs true noise (checks schedule accuracy).\n\nAnalysis:\n • λ sensitivity curve (Fig. 3): %blocks vs FID.\n • OOD curve (Fig. 4): corrupt-σ vs FID.\n • FLOPs vs resolution table.\n\nSuccess criteria (per strategy): all Tier-3/4 runs meet thresholds in ≥75 % cases.\n\nExample code (solver swap):\n```\nfor solver in [DDIM, DPMSolverPP, PLMS]:\n    sampler = solver(model, skip_schedule=gates)\n    imgs = sampler(num_steps)\n```\n\nBranch: feature/exp-2-robust-ablation"
         }
     ],
     "expected_models": [
-        "Stable Diffusion v1.5 UNet",
-        "Stable Diffusion v2.1 UNet",
-        "OpenJourney UNet",
-        "DPMSolver++"
+        "DDPM-UNet-32",
+        "DiT-XL/2",
+        "ADM-KD",
+        "Stable-Diffusion-v1.5-UNet"
     ],
     "expected_datasets": [
-        "LAION-Aesthetics",
-        "MS-COCO",
-        "ImageNet-1k",
-        "Flickr30k",
-        "ArtBench-10"
+        "CIFAR-10",
+        "ImageNet-64",
+        "LSUN-256",
+        "LSUN-512-latent"
     ]
 }
