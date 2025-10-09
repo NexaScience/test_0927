@@ -25,5 +25,5 @@ diffusion modelの速度改善
 Now, output the dictionary literal in one single line (no additional commentary):
 Output:
 {
-    "generated_query_1": "diffusion model inference speedup"
+    "generated_query_1": "diffusion model acceleration"
 }
