@@ -1,0 +1,150 @@
+# config/full_experiment.yaml
+# Complete configuration for experiment exp-2-generalisation-robustness.
+
+runs:
+  # --------------------------------------------------------------------
+  # 1. Stable-Diffusion-2.1 baseline (FD-5)
+  # --------------------------------------------------------------------
+  - name: SD2.1-FD-5
+    dataset:
+      name: hf_text_image
+      params:
+        hf_name: limingcv/LAION_Aesthetics_512
+        image_column: image
+        caption_column: TEXT
+        resolution: 512
+        max_samples: 50000   # subset for manageable training
+        val_ratio: 0.02
+    model:
+      name: diffusion_fcr
+      params:
+        pretrained_model_name_or_path: stabilityai/stable-diffusion-2-1
+        lambda_fcr: 0.0          # no FCR for baseline
+        delta_max: 1
+        fd_stride: 5
+        scheduler_type: ddpm
+        use_fp16: true
+    training:
+      epochs: 0                 # inference-only baseline
+      batch_size: 1
+      lr: 0.0
+    evaluation:
+      compute_fid: true
+
+  # --------------------------------------------------------------------
+  # 2. SD-2.1 with FCR, stride 10
+  # --------------------------------------------------------------------
+  - name: SD2.1-FCR(λ=0.10)-FD-10
+    dataset:
+      name: hf_text_image
+      params:
+        hf_name: limingcv/LAION_Aesthetics_512
+        image_column: image
+        caption_column: TEXT
+        resolution: 512
+        max_samples: 50000
+        val_ratio: 0.02
+    model:
+      name: diffusion_fcr
+      params:
+        pretrained_model_name_or_path: stabilityai/stable-diffusion-2-1
+        lambda_fcr: 0.10
+        delta_max: 10
+        fd_stride: 10
+        scheduler_type: ddpm
+        use_fp16: true
+    training:
+      epochs: 10
+      batch_size: 4
+      lr: 1e-4
+    evaluation:
+      compute_fid: true
+
+  # --------------------------------------------------------------------
+  # 3. SD-2.1 with FCR + DPMSolver++, stride 10
+  # --------------------------------------------------------------------
+  - name: SD2.1-FCR(λ=0.10)+DPMSolver-FD-10
+    dataset:
+      name: hf_text_image
+      params:
+        hf_name: limingcv/LAION_Aesthetics_512
+        image_column: image
+        caption_column: TEXT
+        resolution: 512
+        max_samples: 50000
+        val_ratio: 0.02
+    model:
+      name: diffusion_fcr
+      params:
+        pretrained_model_name_or_path: stabilityai/stable-diffusion-2-1
+        lambda_fcr: 0.10
+        delta_max: 10
+        fd_stride: 10
+        scheduler_type: dpmsolver++
+        use_fp16: true
+    training:
+      epochs: 10
+      batch_size: 4
+      lr: 1e-4
+    evaluation:
+      compute_fid: true
+
+  # --------------------------------------------------------------------
+  # 4. OpenJourney baseline (FD-5)
+  # --------------------------------------------------------------------
+  - name: OpenJourney-FD-5
+    dataset:
+      name: hf_text_image
+      params:
+        hf_name: artbench
+        image_column: image
+        caption_column: label   # labels → caption string via dataset wrapper
+        resolution: 512
+        max_samples: 40000
+        val_ratio: 0.05
+    model:
+      name: diffusion_fcr
+      params:
+        pretrained_model_name_or_path: prompthero/openjourney
+        lambda_fcr: 0.0
+        delta_max: 1
+        fd_stride: 5
+        scheduler_type: ddpm
+        use_fp16: true
+    training:
+      epochs: 0
+      batch_size: 1
+      lr: 0.0
+    evaluation:
+      compute_fid: true
+
+  # --------------------------------------------------------------------
+  # 5. OpenJourney with FCR, stride 10
+  # --------------------------------------------------------------------
+  - name: OpenJourney-FCR(λ=0.10)-FD-10
+    dataset:
+      name: hf_text_image
+      params:
+        hf_name: artbench
+        image_column: image
+        caption_column: label
+        resolution: 512
+        max_samples: 40000
+        val_ratio: 0.05
+    model:
+      name: diffusion_fcr
+      params:
+        pretrained_model_name_or_path: prompthero/openjourney
+        lambda_fcr: 0.10
+        delta_max: 10
+        fd_stride: 10
+        scheduler_type: ddpm
+        use_fp16: true
+    training:
+      epochs: 10
+      batch_size: 4
+      lr: 1e-4
+    evaluation:
+      compute_fid: true
+
+# End of full_experiment.yaml

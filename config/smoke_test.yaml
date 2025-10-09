@@ -1,0 +1,99 @@
+# config/smoke_test.yaml
+# Lightweight smoke-test covering all run IDs from the full experiment but with
+# toy datasets & models so that the CI pipeline completes in seconds.
+
+runs:
+  - name: SD2.1-FD-5
+    dataset:
+      name: toy
+      params:
+        num_samples: 32
+        image_size: 32
+    model:
+      name: toy
+      params:
+        input_dim: 3*32*32
+        hidden_dim: 64
+        num_classes: 10
+    training:
+      epochs: 1
+      batch_size: 8
+      lr: 0.001
+    evaluation:
+      compute_fid: false
+
+  - name: SD2.1-FCR(λ=0.10)-FD-10
+    dataset:
+      name: toy
+      params:
+        num_samples: 32
+        image_size: 32
+    model:
+      name: toy
+      params:
+        input_dim: 3*32*32
+        hidden_dim: 64
+        num_classes: 10
+    training:
+      epochs: 1
+      batch_size: 8
+      lr: 0.001
+    evaluation:
+      compute_fid: false
+
+  - name: SD2.1-FCR(λ=0.10)+DPMSolver-FD-10
+    dataset:
+      name: toy
+      params:
+        num_samples: 32
+        image_size: 32
+    model:
+      name: toy
+      params:
+        input_dim: 3*32*32
+        hidden_dim: 64
+        num_classes: 10
+    training:
+      epochs: 1
+      batch_size: 8
+      lr: 0.001
+    evaluation:
+      compute_fid: false
+
+  - name: OpenJourney-FD-5
+    dataset:
+      name: toy
+      params:
+        num_samples: 32
+        image_size: 32
+    model:
+      name: toy
+      params:
+        input_dim: 3*32*32
+        hidden_dim: 64
+        num_classes: 10
+    training:
+      epochs: 1
+      batch_size: 8
+      lr: 0.001
+    evaluation:
+      compute_fid: false
+
+  - name: OpenJourney-FCR(λ=0.10)-FD-10
+    dataset:
+      name: toy
+      params:
+        num_samples: 32
+        image_size: 32
+    model:
+      name: toy
+      params:
+        input_dim: 3*32*32
+        hidden_dim: 64
+        num_classes: 10
+    training:
+      epochs: 1
+      batch_size: 8
+      lr: 0.001
+    evaluation:
+      compute_fid: false
