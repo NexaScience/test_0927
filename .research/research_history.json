@@ -23,7 +23,8 @@
           "Jian Yang"
         ],
         "published_date": "2023-12-15T08:46:43Z",
-        "pdf_url": "https://arxiv.org/pdf/2312.09608v2.pdf"
+        "pdf_url": "https://arxiv.org/pdf/2312.09608v2.pdf",
+        "github_url": "https://github.com/dbolya/tomesd"
       },
       "llm_extracted_info": {
         "main_contributions": "The paper addresses the slow inference time of diffusion models by proposing a novel acceleration method. It empirically finds that UNet encoder features change minimally across time-steps, unlike decoder features which vary substantially. Based on this, the main contributions are: 1) A thorough empirical study of UNet features, highlighting minimal encoder feature variation. 2) A parallel sampling strategy for diffusion models at adjacent time-steps, significantly accelerating denoising without requiring training or fine-tuning. 3) A prior noise injection method to improve high-frequency texture details in generated images. 4) The method's compatibility with existing acceleration techniques like DDIM and DPM-Solver for further inference speedup. This approach achieves substantial speedups (e.g., 41% for Stable Diffusion, 24% for DeepFloyd-IF, 34% for DiT) while maintaining high image generation quality across diverse tasks including text-to-image, text-to-video, personalized generation, and reference-guided generation.",
