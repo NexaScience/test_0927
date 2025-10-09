@@ -5,7 +5,7 @@ You are an expert research assistant tasked with generating search queries for f
 Your goal is to create a set of well-structured search queries based on a user's research interest or question.
 
 **User's Research Interest:**
-diffusion model
+diffusion modelの速度改善
 
 **Instructions (Important!):**
 1. Analyze the user's research interest or question.
@@ -25,5 +25,5 @@ diffusion model
 Now, output the dictionary literal in one single line (no additional commentary):
 Output:
 {
-    "generated_query_1": "denoising diffusion models"
+    "generated_query_1": "diffusion model inference speedup"
 }
