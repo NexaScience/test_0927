@@ -1,0 +1,124 @@
+# config/full_experiment.yaml
+# Complete configuration for experiment ``exp-1-main-ablation``.
+# Five run variations are defined: two baselines (FD-5 & FD-10) and three FCR
+# ablations with λ ∈ {0.05, 0.10, 0.20}, all evaluated with stride-10 caching.
+
+runs:
+  # ---------------------------------------------------------------------------
+  # Baseline – Faster Diffusion, stride-5 (quality upper-bound)
+  # ---------------------------------------------------------------------------
+  - name: FD-5-baseline
+    dataset:
+      name: laion_aesthetics_512
+      params:
+        image_size: 512
+        subset_size: 50000   # 50k samples for quick fine-tune / evaluation
+    model:
+      name: diffusion_baseline
+      params:
+        pretrained_model_name_or_path: runwayml/stable-diffusion-v1-5
+        stride: 5
+        use_fp16: true
+    training:
+      epochs: 0            # inference-only baseline (no fine-tuning)
+      batch_size: 2        # irrelevant – kept small for memory
+      lr: 0.0
+    evaluation:
+      compute_fid: true
+
+  # ---------------------------------------------------------------------------
+  # Baseline – Faster Diffusion, stride-10 (speed upper-bound)
+  # ---------------------------------------------------------------------------
+  - name: FD-10-baseline
+    dataset:
+      name: laion_aesthetics_512
+      params:
+        image_size: 512
+        subset_size: 50000
+    model:
+      name: diffusion_baseline
+      params:
+        pretrained_model_name_or_path: runwayml/stable-diffusion-v1-5
+        stride: 10
+        use_fp16: true
+    training:
+      epochs: 0
+      batch_size: 2
+      lr: 0.0
+    evaluation:
+      compute_fid: true
+
+  # ---------------------------------------------------------------------------
+  # Proposed – FCR fine-tune, λ = 0.05, stride-10 sampling
+  # ---------------------------------------------------------------------------
+  - name: FCR(λ=0.05)-FD-10
+    dataset:
+      name: laion_aesthetics_512
+      params:
+        image_size: 512
+        subset_size: 50000
+    model:
+      name: diffusion_fcr
+      params:
+        pretrained_model_name_or_path: runwayml/stable-diffusion-v1-5
+        lambda_fcr: 0.05
+        delta_max: 10
+        stride: 10
+        use_fp16: true
+    training:
+      epochs: 10          # ≈10k optimiser steps for proof-of-concept
+      batch_size: 4
+      lr: 1e-5
+      grad_clip: 1.0
+    evaluation:
+      compute_fid: true
+
+  # ---------------------------------------------------------------------------
+  # Proposed – FCR fine-tune, λ = 0.10, stride-10 sampling (expected best)
+  # ---------------------------------------------------------------------------
+  - name: FCR(λ=0.10)-FD-10
+    dataset:
+      name: laion_aesthetics_512
+      params:
+        image_size: 512
+        subset_size: 50000
+    model:
+      name: diffusion_fcr
+      params:
+        pretrained_model_name_or_path: runwayml/stable-diffusion-v1-5
+        lambda_fcr: 0.10
+        delta_max: 10
+        stride: 10
+        use_fp16: true
+    training:
+      epochs: 10
+      batch_size: 4
+      lr: 1e-5
+      grad_clip: 1.0
+    evaluation:
+      compute_fid: true
+
+  # ---------------------------------------------------------------------------
+  # Proposed – FCR fine-tune, λ = 0.20, stride-10 sampling (strong regulariser)
+  # ---------------------------------------------------------------------------
+  - name: FCR(λ=0.20)-FD-10
+    dataset:
+      name: laion_aesthetics_512
+      params:
+        image_size: 512
+        subset_size: 50000
+    model:
+      name: diffusion_fcr
+      params:
+        pretrained_model_name_or_path: runwayml/stable-diffusion-v1-5
+        lambda_fcr: 0.20
+        delta_max: 10
+        stride: 10
+        use_fp16: true
+    training:
+      epochs: 10
+      batch_size: 4
+      lr: 1e-5
+      grad_clip: 1.0
+    evaluation:
+      compute_fid: true

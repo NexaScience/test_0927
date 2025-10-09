@@ -1,0 +1,100 @@
+# config/smoke_test.yaml
+# Lightweight smoke-test versions of every run variation defined in full_experiment.yaml.
+# All runs use a tiny synthetic dataset and a toy MLP model so that the complete
+# pipeline (training ➜ metrics ➜ evaluation scripts) can be validated in seconds.
+
+runs:
+  - name: FD-5-baseline
+    dataset:
+      name: toy
+      params:
+        num_samples: 64
+        image_size: 32
+    model:
+      name: toy
+      params:
+        input_dim: 3*32*32
+        hidden_dim: 64
+        num_classes: 10
+    training:
+      epochs: 1
+      batch_size: 16
+      lr: 0.001
+    evaluation:
+      compute_fid: false
+
+  - name: FD-10-baseline
+    dataset:
+      name: toy
+      params:
+        num_samples: 64
+        image_size: 32
+    model:
+      name: toy
+      params:
+        input_dim: 3*32*32
+        hidden_dim: 64
+        num_classes: 10
+    training:
+      epochs: 1
+      batch_size: 16
+      lr: 0.001
+    evaluation:
+      compute_fid: false
+
+  - name: FCR(λ=0.05)-FD-10
+    dataset:
+      name: toy
+      params:
+        num_samples: 64
+        image_size: 32
+    model:
+      name: toy
+      params:
+        input_dim: 3*32*32
+        hidden_dim: 64
+        num_classes: 10
+    training:
+      epochs: 1
+      batch_size: 16
+      lr: 0.001
+    evaluation:
+      compute_fid: false
+
+  - name: FCR(λ=0.10)-FD-10
+    dataset:
+      name: toy
+      params:
+        num_samples: 64
+        image_size: 32
+    model:
+      name: toy
+      params:
+        input_dim: 3*32*32
+        hidden_dim: 64
+        num_classes: 10
+    training:
+      epochs: 1
+      batch_size: 16
+      lr: 0.001
+    evaluation:
+      compute_fid: false
+
+  - name: FCR(λ=0.20)-FD-10
+    dataset:
+      name: toy
+      params:
+        num_samples: 64
+        image_size: 32
+    model:
+      name: toy
+      params:
+        input_dim: 3*32*32
+        hidden_dim: 64
+        num_classes: 10
+    training:
+      epochs: 1
+      batch_size: 16
+      lr: 0.001
+    evaluation:
+      compute_fid: false
