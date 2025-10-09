@@ -1,7 +1,7 @@
 {
-  "research_topic": "diffusion model",
+  "research_topic": "diffusion modelの速度改善",
   "queries": [
-    "denoising diffusion models"
+    "diffusion model inference speedup"
   ],
   "research_study_list": [
     {
