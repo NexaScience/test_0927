@@ -1,0 +1,17 @@
+
+Input:
+# Task
+You carefully read the contents of the “Paper Outline” and select one GitHub link from the “GitHub URLs List” that you think is most relevant to the contents.
+# Constraints
+- Output the index number corresponding to the selected GitHub URL.
+- Be sure to select only one GitHub URL.
+- If there is no related GitHub link, output None.
+# Paper Outline
+The core methodology is based on an empirical analysis of UNet features, showing that encoder features change minimally across time-steps while decoder features vary significantly. This insight motivates 'encoder propagation,' where encoder computation is omitted at certain 'non-key' adjacent time-steps, and features from a previous 'key' time-step's encoder are reused as input for the decoder. This enables parallel execution of multiple decoder steps, leading to faster inference. Two strategies for key time-step selection are proposed: uniform (fixed stride) and non-uniform (more key steps initially, fewer later, based on feature change intensity). A 'prior noise injection' strategy is introduced to preserve texture details, combining the initial latent code zT into subsequent latent codes zt (zt = zt + α · zT) from a specific time-step, which demands negligible computational resources.
+
+# GitHub URLs List
+['https://github.com/deep-floyd/IF', 'https://github.com/facebookresearch/fvcore', 'https://github.com/LuChengTHU/dpm-solver', 'https://github.com/dbolya/tomesd', 'https://github.com/Picsart-AI-Research/Text2Video-Zero', 'https://github.com/lllyasviel/ControlNet', 'https://github.com/google/dreambooth', 'https://github.com/adobe-research/custom-diffusion']
+Output:
+{
+    "index": 3
+}
