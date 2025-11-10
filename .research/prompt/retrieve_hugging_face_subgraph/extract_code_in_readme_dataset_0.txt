@@ -4,210 +4,57 @@ From the Hugging Face README provided in “# README,” extract and output only
 
 # README
 ---
-annotations_creators:
-- crowdsourced
-language_creators:
-- found
-language:
-- en
-license:
-- unknown
-multilinguality:
-- monolingual
+license: mit
+tags:
+- Imitation Learning
+- Expert Trajectory
+pretty_name: CartPole-v1 Expert Dataset
 size_categories:
-- 10K<n<100K
-source_datasets:
-- extended|other-80-Million-Tiny-Images
-task_categories:
-- image-classification
-task_ids: []
-paperswithcode_id: cifar-10
-pretty_name: Cifar10
-dataset_info:
-  config_name: plain_text
-  features:
-  - name: img
-    dtype: image
-  - name: label
-    dtype:
-      class_label:
-        names:
-          '0': airplane
-          '1': automobile
-          '2': bird
-          '3': cat
-          '4': deer
-          '5': dog
-          '6': frog
-          '7': horse
-          '8': ship
-          '9': truck
-  splits:
-  - name: train
-    num_bytes: 113648310.0
-    num_examples: 50000
-  - name: test
-    num_bytes: 22731580.0
-    num_examples: 10000
-  download_size: 143646105
-  dataset_size: 136379890.0
-configs:
-- config_name: plain_text
-  data_files:
-  - split: train
-    path: plain_text/train-*
-  - split: test
-    path: plain_text/test-*
-  default: true
+- 10M<n<100M
 ---
 
-# Dataset Card for CIFAR-10
+# CartPole-v1 - Imitation Learning Datasets
 
-## Table of Contents
-- [Dataset Description](#dataset-description)
-  - [Dataset Summary](#dataset-summary)
-  - [Supported Tasks and Leaderboards](#supported-tasks-and-leaderboards)
-  - [Languages](#languages)
-- [Dataset Structure](#dataset-structure)
-  - [Data Instances](#data-instances)
-  - [Data Fields](#data-fields)
-  - [Data Splits](#data-splits)
-- [Dataset Creation](#dataset-creation)
-  - [Curation Rationale](#curation-rationale)
-  - [Source Data](#source-data)
-  - [Annotations](#annotations)
-  - [Personal and Sensitive Information](#personal-and-sensitive-information)
-- [Considerations for Using the Data](#considerations-for-using-the-data)
-  - [Social Impact of Dataset](#social-impact-of-dataset)
-  - [Discussion of Biases](#discussion-of-biases)
-  - [Other Known Limitations](#other-known-limitations)
-- [Additional Information](#additional-information)
-  - [Dataset Curators](#dataset-curators)
-  - [Licensing Information](#licensing-information)
-  - [Citation Information](#citation-information)
-  - [Contributions](#contributions)
+This is a dataset created by [Imitation Learning Datasets](https://github.com/NathanGavenski/IL-Datasets) project. 
+It was created by using Stable Baselines weights from a PPO policy from [HuggingFace](https://huggingface.co/sb3/ppo-CartPole-v1).
 
-## Dataset Description
+## Description
 
-- **Homepage:** https://www.cs.toronto.edu/~kriz/cifar.html
-- **Repository:** 
-- **Paper:** Learning Multiple Layers of Features from Tiny Images by Alex Krizhevsky
-- **Leaderboard:**
-- **Point of Contact:**
-
-### Dataset Summary
-
-The CIFAR-10 dataset consists of 60000 32x32 colour images in 10 classes, with 6000 images per class. There are 50000 training images and 10000 test images.
-The dataset is divided into five training batches and one test batch, each with 10000 images. The test batch contains exactly 1000 randomly-selected images from each class. The training batches contain the remaining images in random order, but some training batches may contain more images from one class than another. Between them, the training batches contain exactly 5000 images from each class.
-
-### Supported Tasks and Leaderboards
-
-- `image-classification`: The goal of this task is to classify a given image into one of 10 classes. The leaderboard is available [here](https://paperswithcode.com/sota/image-classification-on-cifar-10).
-
-### Languages
-
-English
-
-## Dataset Structure
-
-### Data Instances
-
-A sample from the training set is provided below:
-
+The dataset consists of 1,000 episodes with an average episodic reward of 500.
+Each entry consists of:
 ```
-{
-  'img': <PIL.PngImagePlugin.PngImageFile image mode=RGB size=32x32 at 0x201FA6EE748>,
-  'label': 0
+obs (list): observation with length 4.
+action (int): action (0 or 1).
+reward (float): reward point for that timestep.
+episode_returns (bool): if that state was the initial timestep for an episode.
+```
+
+## Usage
+
+Feel free to download and use the `teacher.jsonl` dataset as you please.
+If you are interested in using our PyTorch Dataset implementation, feel free to check the [IL Datasets](https://github.com/NathanGavenski/IL-Datasets/blob/main/src/imitation_datasets/dataset/dataset.py) project.
+There, we implement a base Dataset that downloads this dataset and all other datasets directly from HuggingFace.
+The Baseline Dataset also allows for more control over train and test splits and how many episodes you want to use (in cases where the 1k episodes are not necessary).
+
+## Citation
+
+```{bibtex}
+@inproceedings{gavenski2024ildatasets,
+  author = {Gavenski, Nathan and Luck, Michael and Rodrigues, Odinaldo},
+  title = {Imitation Learning Datasets: A Toolkit For Creating Datasets, Training Agents and Benchmarking},
+  year = {2024},
+  isbn = {9798400704864},
+  publisher = {International Foundation for Autonomous Agents and Multiagent Systems},
+  address = {Richland, SC},
+  abstract = {Imitation learning field requires expert data to train agents in a task. Most often, this learning approach suffers from the absence of available data, which results in techniques being tested on its dataset. Creating datasets is a cumbersome process requiring researchers to train expert agents from scratch, record their interactions and test each benchmark method with newly created data. Moreover, creating new datasets for each new technique results in a lack of consistency in the evaluation process since each dataset can drastically vary in state and action distribution. In response, this work aims to address these issues by creating Imitation Learning Datasets, a toolkit that allows for: (i) curated expert policies with multithreaded support for faster dataset creation; (ii) readily available datasets and techniques with precise measurements; and (iii) sharing implementations of common imitation learning techniques. Demonstration link: https://nathangavenski.github.io/#/il-datasets-video},
+  booktitle = {Proceedings of the 23rd International Conference on Autonomous Agents and Multiagent Systems},
+  pages = {2800–2802},
+  numpages = {3},
+  keywords = {benchmarking, dataset, imitation learning},
+  location = {<conf-loc>, <city>Auckland</city>, <country>New Zealand</country>, </conf-loc>},
+  series = {AAMAS '24}
 }
 ```
-
-### Data Fields
-
-- img: A `PIL.Image.Image` object containing the 32x32 image. Note that when accessing the image column: `dataset[0]["image"]` the image file is automatically decoded. Decoding of a large number of image files might take a significant amount of time. Thus it is important to first query the sample index before the `"image"` column, *i.e.* `dataset[0]["image"]` should **always** be preferred over `dataset["image"][0]`
-- label: 0-9 with the following correspondence
-         0 airplane
-         1 automobile
-         2 bird
-         3 cat
-         4 deer
-         5 dog
-         6 frog
-         7 horse
-         8 ship
-         9 truck
-
-### Data Splits
-
-Train and Test
-
-## Dataset Creation
-
-### Curation Rationale
-
-[More Information Needed]
-
-### Source Data
-
-#### Initial Data Collection and Normalization
-
-[More Information Needed]
-
-#### Who are the source language producers?
-
-[More Information Needed]
-
-### Annotations
-
-#### Annotation process
-
-[More Information Needed]
-
-#### Who are the annotators?
-
-[More Information Needed]
-
-### Personal and Sensitive Information
-
-[More Information Needed]
-
-## Considerations for Using the Data
-
-### Social Impact of Dataset
-
-[More Information Needed]
-
-### Discussion of Biases
-
-[More Information Needed]
-
-### Other Known Limitations
-
-[More Information Needed]
-
-## Additional Information
-
-### Dataset Curators
-
-[More Information Needed]
-
-### Licensing Information
-
-[More Information Needed]
-
-### Citation Information
-
-```
-@TECHREPORT{Krizhevsky09learningmultiple,
-    author = {Alex Krizhevsky},
-    title = {Learning multiple layers of features from tiny images},
-    institution = {},
-    year = {2009}
-}
-```
-
-### Contributions
-
-Thanks to [@czabo](https://github.com/czabo) for adding this dataset.
 Output:
 {
     "extracted_code": ""
