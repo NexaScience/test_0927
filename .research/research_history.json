@@ -91,7 +91,139 @@
         "Stochastic-CartPole",
         "Hopper-v3",
         "HalfCheetah-v3"
-      ]
+      ],
+      "external_resources": {
+        "hugging_face": {
+          "models": [
+            {
+              "id": "sb3/dqn-MountainCar-v0",
+              "author": "sb3",
+              "sha": "fef256e4b7d9baea57241ddc2a048a970e4c3f21",
+              "created_at": "2022-05-19T23:08:31+00:00",
+              "last_modified": "2022-10-11T15:06:51+00:00",
+              "private": false,
+              "gated": false,
+              "disabled": false,
+              "downloads": 142,
+              "likes": 1,
+              "siblings": [
+                {
+                  "rfilename": ".gitattributes"
+                },
+                {
+                  "rfilename": "README.md"
+                },
+                {
+                  "rfilename": "args.yml"
+                },
+                {
+                  "rfilename": "config.yml"
+                },
+                {
+                  "rfilename": "dqn-MountainCar-v0.zip"
+                },
+                {
+                  "rfilename": "dqn-MountainCar-v0/_stable_baselines3_version"
+                },
+                {
+                  "rfilename": "dqn-MountainCar-v0/data"
+                },
+                {
+                  "rfilename": "dqn-MountainCar-v0/policy.optimizer.pth"
+                },
+                {
+                  "rfilename": "dqn-MountainCar-v0/policy.pth"
+                },
+                {
+                  "rfilename": "dqn-MountainCar-v0/pytorch_variables.pth"
+                }
+              ],
+              "card_data": {
+                "language": [],
+                "library_name": "stable-baselines3",
+                "tags": [
+                  "MountainCar-v0",
+                  "deep-reinforcement-learning",
+                  "reinforcement-learning",
+                  "stable-baselines3"
+                ],
+                "datasets": [],
+                "task_categories": [],
+                "size_categories": [],
+                "metrics": [],
+                "widget": []
+              },
+              "tags": [
+                "stable-baselines3",
+                "MountainCar-v0",
+                "deep-reinforcement-learning",
+                "reinforcement-learning",
+                "model-index",
+                "region:us"
+              ],
+              "pipeline_tag": "reinforcement-learning",
+              "library_name": "stable-baselines3",
+              "readme": "---\nlibrary_name: stable-baselines3\ntags:\n- MountainCar-v0\n- deep-reinforcement-learning\n- reinforcement-learning\n- stable-baselines3\nmodel-index:\n- name: DQN\n  results:\n  - metrics:\n    - type: mean_reward\n      value: -103.40 +/- 7.49\n      name: mean_reward\n    task:\n      type: reinforcement-learning\n      name: reinforcement-learning\n    dataset:\n      name: MountainCar-v0\n      type: MountainCar-v0\n---\n\n# **DQN** Agent playing **MountainCar-v0**\nThis is a trained model of a **DQN** agent playing **MountainCar-v0**\nusing the [stable-baselines3 library](https://github.com/DLR-RM/stable-baselines3)\nand the [RL Zoo](https://github.com/DLR-RM/rl-baselines3-zoo).\n\nThe RL Zoo is a training framework for Stable Baselines3\nreinforcement learning agents,\nwith hyperparameter optimization and pre-trained agents included.\n\n## Usage (with SB3 RL Zoo)\n\nRL Zoo: https://github.com/DLR-RM/rl-baselines3-zoo<br/>\nSB3: https://github.com/DLR-RM/stable-baselines3<br/>\nSB3 Contrib: https://github.com/Stable-Baselines-Team/stable-baselines3-contrib\n\n```\n# Download model and save it into the logs/ folder\npython -m rl_zoo3.load_from_hub --algo dqn --env MountainCar-v0 -orga sb3 -f logs/\npython enjoy.py --algo dqn --env MountainCar-v0  -f logs/\n```\n\n## Training (with the RL Zoo)\n```\npython train.py --algo dqn --env MountainCar-v0 -f logs/\n# Upload the model and generate video (when possible)\npython -m rl_zoo3.push_to_hub --algo dqn --env MountainCar-v0 -f logs/ -orga sb3\n```\n\n## Hyperparameters\n```python\nOrderedDict([('batch_size', 128),\n             ('buffer_size', 10000),\n             ('exploration_final_eps', 0.07),\n             ('exploration_fraction', 0.2),\n             ('gamma', 0.98),\n             ('gradient_steps', 8),\n             ('learning_rate', 0.004),\n             ('learning_starts', 1000),\n             ('n_timesteps', 120000.0),\n             ('policy', 'MlpPolicy'),\n             ('policy_kwargs', 'dict(net_arch=[256, 256])'),\n             ('target_update_interval', 600),\n             ('train_freq', 16),\n             ('normalize', False)])\n```\n",
+              "extracted_code": "OrderedDict([('batch_size', 128),\n             ('buffer_size', 10000),\n             ('exploration_final_eps', 0.07),\n             ('exploration_fraction', 0.2),\n             ('gamma', 0.98),\n             ('gradient_steps', 8),\n             ('learning_rate', 0.004),\n             ('learning_starts', 1000),\n             ('n_timesteps', 120000.0),\n             ('policy', 'MlpPolicy'),\n             ('policy_kwargs', 'dict(net_arch=[256, 256])'),\n             ('target_update_interval', 600),\n             ('train_freq', 16),\n             ('normalize', False)])"
+            }
+          ],
+          "datasets": [
+            {
+              "id": "NathanGavenski/CartPole-v1",
+              "author": "NathanGavenski",
+              "sha": "523ca21d86ef6844bad6e520cfa364ad132f1ed1",
+              "created_at": "2023-10-24T17:30:02+00:00",
+              "last_modified": "2024-06-11T13:50:17+00:00",
+              "private": false,
+              "gated": false,
+              "disabled": false,
+              "downloads": 223,
+              "likes": 4,
+              "siblings": [
+                {
+                  "rfilename": ".gitattributes"
+                },
+                {
+                  "rfilename": "README.md"
+                },
+                {
+                  "rfilename": "teacher.jsonl"
+                }
+              ],
+              "card_data": {
+                "license": "mit",
+                "language": [],
+                "tags": [
+                  "Imitation Learning",
+                  "Expert Trajectory"
+                ],
+                "datasets": [],
+                "task_categories": [],
+                "size_categories": [
+                  "10M<n<100M"
+                ],
+                "metrics": [],
+                "widget": []
+              },
+              "tags": [
+                "license:mit",
+                "size_categories:100K<n<1M",
+                "format:json",
+                "modality:tabular",
+                "library:datasets",
+                "library:pandas",
+                "library:mlcroissant",
+                "library:polars",
+                "region:us",
+                "Imitation Learning",
+                "Expert Trajectory"
+              ],
+              "readme": "---\nlicense: mit\ntags:\n- Imitation Learning\n- Expert Trajectory\npretty_name: CartPole-v1 Expert Dataset\nsize_categories:\n- 10M<n<100M\n---\n\n# CartPole-v1 - Imitation Learning Datasets\n\nThis is a dataset created by [Imitation Learning Datasets](https://github.com/NathanGavenski/IL-Datasets) project. \nIt was created by using Stable Baselines weights from a PPO policy from [HuggingFace](https://huggingface.co/sb3/ppo-CartPole-v1).\n\n## Description\n\nThe dataset consists of 1,000 episodes with an average episodic reward of 500.\nEach entry consists of:\n```\nobs (list): observation with length 4.\naction (int): action (0 or 1).\nreward (float): reward point for that timestep.\nepisode_returns (bool): if that state was the initial timestep for an episode.\n```\n\n## Usage\n\nFeel free to download and use the `teacher.jsonl` dataset as you please.\nIf you are interested in using our PyTorch Dataset implementation, feel free to check the [IL Datasets](https://github.com/NathanGavenski/IL-Datasets/blob/main/src/imitation_datasets/dataset/dataset.py) project.\nThere, we implement a base Dataset that downloads this dataset and all other datasets directly from HuggingFace.\nThe Baseline Dataset also allows for more control over train and test splits and how many episodes you want to use (in cases where the 1k episodes are not necessary).\n\n## Citation\n\n```{bibtex}\n@inproceedings{gavenski2024ildatasets,\n  author = {Gavenski, Nathan and Luck, Michael and Rodrigues, Odinaldo},\n  title = {Imitation Learning Datasets: A Toolkit For Creating Datasets, Training Agents and Benchmarking},\n  year = {2024},\n  isbn = {9798400704864},\n  publisher = {International Foundation for Autonomous Agents and Multiagent Systems},\n  address = {Richland, SC},\n  abstract = {Imitation learning field requires expert data to train agents in a task. Most often, this learning approach suffers from the absence of available data, which results in techniques being tested on its dataset. Creating datasets is a cumbersome process requiring researchers to train expert agents from scratch, record their interactions and test each benchmark method with newly created data. Moreover, creating new datasets for each new technique results in a lack of consistency in the evaluation process since each dataset can drastically vary in state and action distribution. In response, this work aims to address these issues by creating Imitation Learning Datasets, a toolkit that allows for: (i) curated expert policies with multithreaded support for faster dataset creation; (ii) readily available datasets and techniques with precise measurements; and (iii) sharing implementations of common imitation learning techniques. Demonstration link: https://nathangavenski.github.io/#/il-datasets-video},\n  booktitle = {Proceedings of the 23rd International Conference on Autonomous Agents and Multiagent Systems},\n  pages = {2800–2802},\n  numpages = {3},\n  keywords = {benchmarking, dataset, imitation learning},\n  location = {<conf-loc>, <city>Auckland</city>, <country>New Zealand</country>, </conf-loc>},\n  series = {AAMAS '24}\n}\n```",
+              "extracted_code": ""
+            }
+          ]
+        }
+      }
     }
   },
   "idea_info_history": [
