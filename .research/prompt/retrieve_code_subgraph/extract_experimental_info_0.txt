@@ -1,0 +1,484 @@
+
+Input:
+You are a researcher with expertise in engineering in the field of machine learning.
+
+# Instructions
+- The content described in “Repository Content” corresponds to the GitHub repository of the method described in “Method.”
+- Please extract the following two pieces of information from “Repository Content”:
+    - experimental_code：Extract the implementation sections that are directly related to the method described in “Method.”
+    - experimental_info：Extract and output the experimental settings related to the method described in “Method.”
+
+# Method
+The methodology is based on an empirical analysis of UNet encoder and decoder features, revealing minimal variation in encoder features and substantial variation in decoder features across time-steps. This insight motivates 'encoder propagation,' where encoder computations are omitted at certain adjacent non-key time-steps, and pre-computed encoder features from previous key time-steps are reused as input for multiple subsequent decoder steps. These multiple decoder steps can then be processed in parallel. Both uniform and non-uniform strategies for selecting key time-steps are explored, with non-uniform performing better. Additionally, a prior noise injection method (combining initial latent code zT into subsequent steps from a specific time-step τ) is introduced to preserve texture details.
+
+# Repository Content
+File Path: setup.py
+Content:
+from setuptools import find_packages, setup
+
+setup(
+    name="tomesd",
+    version="0.1.3",
+    author="Daniel Bolya",
+    url="https://github.com/dbolya/tomesd",
+    description="Token Merging for Stable Diffusion",
+    install_requires=["torch>=1.12.1"],
+    packages=find_packages(exclude=("examples", "build")),
+    license = 'MIT',
+    long_description=open("README.md", "r", encoding="utf-8").read(),
+    long_description_content_type="text/markdown",
+)
+File Path: tomesd/__init__.py
+Content:
+from . import merge, patch
+from .patch import apply_patch, remove_patch
+
+__all__ = ["merge", "patch", "apply_patch", "remove_patch"]
+File Path: tomesd/merge.py
+Content:
+import torch
+from typing import Tuple, Callable
+
+
+def do_nothing(x: torch.Tensor, mode:str=None):
+    return x
+
+
+def mps_gather_workaround(input, dim, index):
+    if input.shape[-1] == 1:
+        return torch.gather(
+            input.unsqueeze(-1),
+            dim - 1 if dim < 0 else dim,
+            index.unsqueeze(-1)
+        ).squeeze(-1)
+    else:
+        return torch.gather(input, dim, index)
+
+
+def bipartite_soft_matching_random2d(metric: torch.Tensor,
+                                     w: int, h: int, sx: int, sy: int, r: int,
+                                     no_rand: bool = False,
+                                     generator: torch.Generator = None) -> Tuple[Callable, Callable]:
+    """
+    Partitions the tokens into src and dst and merges r tokens from src to dst.
+    Dst tokens are partitioned by choosing one randomy in each (sx, sy) region.
+
+    Args:
+     - metric [B, N, C]: metric to use for similarity
+     - w: image width in tokens
+     - h: image height in tokens
+     - sx: stride in the x dimension for dst, must divide w
+     - sy: stride in the y dimension for dst, must divide h
+     - r: number of tokens to remove (by merging)
+     - no_rand: if true, disable randomness (use top left corner only)
+     - rand_seed: if no_rand is false, and if not None, sets random seed.
+    """
+    B, N, _ = metric.shape
+
+    if r <= 0:
+        return do_nothing, do_nothing
+
+    gather = mps_gather_workaround if metric.device.type == "mps" else torch.gather
+    
+    with torch.no_grad():
+        hsy, wsx = h // sy, w // sx
+
+        # For each sy by sx kernel, randomly assign one token to be dst and the rest src
+        if no_rand:
+            rand_idx = torch.zeros(hsy, wsx, 1, device=metric.device, dtype=torch.int64)
+        else:
+            rand_idx = torch.randint(sy*sx, size=(hsy, wsx, 1), device=generator.device, generator=generator).to(metric.device)
+        
+        # The image might not divide sx and sy, so we need to work on a view of the top left if the idx buffer instead
+        idx_buffer_view = torch.zeros(hsy, wsx, sy*sx, device=metric.device, dtype=torch.int64)
+        idx_buffer_view.scatter_(dim=2, index=rand_idx, src=-torch.ones_like(rand_idx, dtype=rand_idx.dtype))
+        idx_buffer_view = idx_buffer_view.view(hsy, wsx, sy, sx).transpose(1, 2).reshape(hsy * sy, wsx * sx)
+
+        # Image is not divisible by sx or sy so we need to move it into a new buffer
+        if (hsy * sy) < h or (wsx * sx) < w:
+            idx_buffer = torch.zeros(h, w, device=metric.device, dtype=torch.int64)
+            idx_buffer[:(hsy * sy), :(wsx * sx)] = idx_buffer_view
+        else:
+            idx_buffer = idx_buffer_view
+
+        # We set dst tokens to be -1 and src to be 0, so an argsort gives us dst|src indices
+        rand_idx = idx_buffer.reshape(1, -1, 1).argsort(dim=1)
+
+        # We're finished with these
+        del idx_buffer, idx_buffer_view
+
+        # rand_idx is currently dst|src, so split them
+        num_dst = hsy * wsx
+        a_idx = rand_idx[:, num_dst:, :] # src
+        b_idx = rand_idx[:, :num_dst, :] # dst
+
+        def split(x):
+            C = x.shape[-1]
+            src = gather(x, dim=1, index=a_idx.expand(B, N - num_dst, C))
+            dst = gather(x, dim=1, index=b_idx.expand(B, num_dst, C))
+            return src, dst
+
+        # Cosine similarity between A and B
+        metric = metric / metric.norm(dim=-1, keepdim=True)
+        a, b = split(metric)
+        scores = a @ b.transpose(-1, -2)
+
+        # Can't reduce more than the # tokens in src
+        r = min(a.shape[1], r)
+
+        # Find the most similar greedily
+        node_max, node_idx = scores.max(dim=-1)
+        edge_idx = node_max.argsort(dim=-1, descending=True)[..., None]
+
+        unm_idx = edge_idx[..., r:, :]  # Unmerged Tokens
+        src_idx = edge_idx[..., :r, :]  # Merged Tokens
+        dst_idx = gather(node_idx[..., None], dim=-2, index=src_idx)
+
+    def merge(x: torch.Tensor, mode="mean") -> torch.Tensor:
+        src, dst = split(x)
+        n, t1, c = src.shape
+        
+        unm = gather(src, dim=-2, index=unm_idx.expand(n, t1 - r, c))
+        src = gather(src, dim=-2, index=src_idx.expand(n, r, c))
+        dst = dst.scatter_reduce(-2, dst_idx.expand(n, r, c), src, reduce=mode)
+
+        return torch.cat([unm, dst], dim=1)
+
+    def unmerge(x: torch.Tensor) -> torch.Tensor:
+        unm_len = unm_idx.shape[1]
+        unm, dst = x[..., :unm_len, :], x[..., unm_len:, :]
+        _, _, c = unm.shape
+
+        src = gather(dst, dim=-2, index=dst_idx.expand(B, r, c))
+
+        # Combine back to the original shape
+        out = torch.zeros(B, N, c, device=x.device, dtype=x.dtype)
+        out.scatter_(dim=-2, index=b_idx.expand(B, num_dst, c), src=dst)
+        out.scatter_(dim=-2, index=gather(a_idx.expand(B, a_idx.shape[1], 1), dim=1, index=unm_idx).expand(B, unm_len, c), src=unm)
+        out.scatter_(dim=-2, index=gather(a_idx.expand(B, a_idx.shape[1], 1), dim=1, index=src_idx).expand(B, r, c), src=src)
+
+        return out
+
+    return merge, unmerge
+
+File Path: tomesd/patch.py
+Content:
+import torch
+import math
+from typing import Type, Dict, Any, Tuple, Callable
+
+from . import merge
+from .utils import isinstance_str, init_generator
+
+
+
+def compute_merge(x: torch.Tensor, tome_info: Dict[str, Any]) -> Tuple[Callable, ...]:
+    original_h, original_w = tome_info["size"]
+    original_tokens = original_h * original_w
+    downsample = int(math.ceil(math.sqrt(original_tokens // x.shape[1])))
+
+    args = tome_info["args"]
+
+    if downsample <= args["max_downsample"]:
+        w = int(math.ceil(original_w / downsample))
+        h = int(math.ceil(original_h / downsample))
+        r = int(x.shape[1] * args["ratio"])
+
+        # Re-init the generator if it hasn't already been initialized or device has changed.
+        if args["generator"] is None:
+            args["generator"] = init_generator(x.device)
+        elif args["generator"].device != x.device:
+            args["generator"] = init_generator(x.device, fallback=args["generator"])
+        
+        # If the batch size is odd, then it's not possible for prompted and unprompted images to be in the same
+        # batch, which causes artifacts with use_rand, so force it to be off.
+        use_rand = False if x.shape[0] % 2 == 1 else args["use_rand"]
+        m, u = merge.bipartite_soft_matching_random2d(x, w, h, args["sx"], args["sy"], r, 
+                                                      no_rand=not use_rand, generator=args["generator"])
+    else:
+        m, u = (merge.do_nothing, merge.do_nothing)
+
+    m_a, u_a = (m, u) if args["merge_attn"]      else (merge.do_nothing, merge.do_nothing)
+    m_c, u_c = (m, u) if args["merge_crossattn"] else (merge.do_nothing, merge.do_nothing)
+    m_m, u_m = (m, u) if args["merge_mlp"]       else (merge.do_nothing, merge.do_nothing)
+
+    return m_a, m_c, m_m, u_a, u_c, u_m  # Okay this is probably not very good
+
+
+
+
+
+
+
+def make_tome_block(block_class: Type[torch.nn.Module]) -> Type[torch.nn.Module]:
+    """
+    Make a patched class on the fly so we don't have to import any specific modules.
+    This patch applies ToMe to the forward function of the block.
+    """
+
+    class ToMeBlock(block_class):
+        # Save for unpatching later
+        _parent = block_class
+
+        def _forward(self, x: torch.Tensor, context: torch.Tensor = None) -> torch.Tensor:
+            m_a, m_c, m_m, u_a, u_c, u_m = compute_merge(x, self._tome_info)
+
+            # This is where the meat of the computation happens
+            x = u_a(self.attn1(m_a(self.norm1(x)), context=context if self.disable_self_attn else None)) + x
+            x = u_c(self.attn2(m_c(self.norm2(x)), context=context)) + x
+            x = u_m(self.ff(m_m(self.norm3(x)))) + x
+
+            return x
+    
+    return ToMeBlock
+
+
+
+
+
+
+def make_diffusers_tome_block(block_class: Type[torch.nn.Module]) -> Type[torch.nn.Module]:
+    """
+    Make a patched class for a diffusers model.
+    This patch applies ToMe to the forward function of the block.
+    """
+    class ToMeBlock(block_class):
+        # Save for unpatching later
+        _parent = block_class
+
+        def forward(
+            self,
+            hidden_states,
+            attention_mask=None,
+            encoder_hidden_states=None,
+            encoder_attention_mask=None,
+            timestep=None,
+            cross_attention_kwargs=None,
+            class_labels=None,
+        ) -> torch.Tensor:
+            # (1) ToMe
+            m_a, m_c, m_m, u_a, u_c, u_m = compute_merge(hidden_states, self._tome_info)
+
+            if self.use_ada_layer_norm:
+                norm_hidden_states = self.norm1(hidden_states, timestep)
+            elif self.use_ada_layer_norm_zero:
+                norm_hidden_states, gate_msa, shift_mlp, scale_mlp, gate_mlp = self.norm1(
+                    hidden_states, timestep, class_labels, hidden_dtype=hidden_states.dtype
+                )
+            else:
+                norm_hidden_states = self.norm1(hidden_states)
+
+            # (2) ToMe m_a
+            norm_hidden_states = m_a(norm_hidden_states)
+
+            # 1. Self-Attention
+            cross_attention_kwargs = cross_attention_kwargs if cross_attention_kwargs is not None else {}
+            attn_output = self.attn1(
+                norm_hidden_states,
+                encoder_hidden_states=encoder_hidden_states if self.only_cross_attention else None,
+                attention_mask=attention_mask,
+                **cross_attention_kwargs,
+            )
+            if self.use_ada_layer_norm_zero:
+                attn_output = gate_msa.unsqueeze(1) * attn_output
+
+            # (3) ToMe u_a
+            hidden_states = u_a(attn_output) + hidden_states
+
+            if self.attn2 is not None:
+                norm_hidden_states = (
+                    self.norm2(hidden_states, timestep) if self.use_ada_layer_norm else self.norm2(hidden_states)
+                )
+                # (4) ToMe m_c
+                norm_hidden_states = m_c(norm_hidden_states)
+
+                # 2. Cross-Attention
+                attn_output = self.attn2(
+                    norm_hidden_states,
+                    encoder_hidden_states=encoder_hidden_states,
+                    attention_mask=encoder_attention_mask,
+                    **cross_attention_kwargs,
+                )
+                # (5) ToMe u_c
+                hidden_states = u_c(attn_output) + hidden_states
+
+            # 3. Feed-forward
+            norm_hidden_states = self.norm3(hidden_states)
+            
+            if self.use_ada_layer_norm_zero:
+                norm_hidden_states = norm_hidden_states * (1 + scale_mlp[:, None]) + shift_mlp[:, None]
+
+            # (6) ToMe m_m
+            norm_hidden_states = m_m(norm_hidden_states)
+
+            ff_output = self.ff(norm_hidden_states)
+
+            if self.use_ada_layer_norm_zero:
+                ff_output = gate_mlp.unsqueeze(1) * ff_output
+
+            # (7) ToMe u_m
+            hidden_states = u_m(ff_output) + hidden_states
+
+            return hidden_states
+
+    return ToMeBlock
+
+
+
+
+
+
+def hook_tome_model(model: torch.nn.Module):
+    """ Adds a forward pre hook to get the image size. This hook can be removed with remove_patch. """
+    def hook(module, args):
+        module._tome_info["size"] = (args[0].shape[2], args[0].shape[3])
+        return None
+
+    model._tome_info["hooks"].append(model.register_forward_pre_hook(hook))
+
+
+
+
+
+
+
+
+def apply_patch(
+        model: torch.nn.Module,
+        ratio: float = 0.5,
+        max_downsample: int = 1,
+        sx: int = 2, sy: int = 2,
+        use_rand: bool = True,
+        merge_attn: bool = True,
+        merge_crossattn: bool = False,
+        merge_mlp: bool = False):
+    """
+    Patches a stable diffusion model with ToMe.
+    Apply this to the highest level stable diffusion object (i.e., it should have a .model.diffusion_model).
+
+    Important Args:
+     - model: A top level Stable Diffusion module to patch in place. Should have a ".model.diffusion_model"
+     - ratio: The ratio of tokens to merge. I.e., 0.4 would reduce the total number of tokens by 40%.
+              The maximum value for this is 1-(1/(sx*sy)). By default, the max is 0.75 (I recommend <= 0.5 though).
+              Higher values result in more speed-up, but with more visual quality loss.
+    
+    Args to tinker with if you want:
+     - max_downsample [1, 2, 4, or 8]: Apply ToMe to layers with at most this amount of downsampling.
+                                       E.g., 1 only applies to layers with no downsampling (4/15) while
+                                       8 applies to all layers (15/15). I recommend a value of 1 or 2.
+     - sx, sy: The stride for computing dst sets (see paper). A higher stride means you can merge more tokens,
+               but the default of (2, 2) works well in most cases. Doesn't have to divide image size.
+     - use_rand: Whether or not to allow random perturbations when computing dst sets (see paper). Usually
+                 you'd want to leave this on, but if you're having weird artifacts try turning this off.
+     - merge_attn: Whether or not to merge tokens for attention (recommended).
+     - merge_crossattn: Whether or not to merge tokens for cross attention (not recommended).
+     - merge_mlp: Whether or not to merge tokens for the mlp layers (very not recommended).
+    """
+
+    # Make sure the module is not currently patched
+    remove_patch(model)
+
+    is_diffusers = isinstance_str(model, "DiffusionPipeline") or isinstance_str(model, "ModelMixin")
+
+    if not is_diffusers:
+        if not hasattr(model, "model") or not hasattr(model.model, "diffusion_model"):
+            # Provided model not supported
+            raise RuntimeError("Provided model was not a Stable Diffusion / Latent Diffusion model, as expected.")
+        diffusion_model = model.model.diffusion_model
+    else:
+        # Supports "pipe.unet" and "unet"
+        diffusion_model = model.unet if hasattr(model, "unet") else model
+
+    diffusion_model._tome_info = {
+        "size": None,
+        "hooks": [],
+        "args": {
+            "ratio": ratio,
+            "max_downsample": max_downsample,
+            "sx": sx, "sy": sy,
+            "use_rand": use_rand,
+            "generator": None,
+            "merge_attn": merge_attn,
+            "merge_crossattn": merge_crossattn,
+            "merge_mlp": merge_mlp
+        }
+    }
+    hook_tome_model(diffusion_model)
+
+    for _, module in diffusion_model.named_modules():
+        # If for some reason this has a different name, create an issue and I'll fix it
+        if isinstance_str(module, "BasicTransformerBlock"):
+            make_tome_block_fn = make_diffusers_tome_block if is_diffusers else make_tome_block
+            module.__class__ = make_tome_block_fn(module.__class__)
+            module._tome_info = diffusion_model._tome_info
+
+            # Something introduced in SD 2.0 (LDM only)
+            if not hasattr(module, "disable_self_attn") and not is_diffusers:
+                module.disable_self_attn = False
+
+            # Something needed for older versions of diffusers
+            if not hasattr(module, "use_ada_layer_norm_zero") and is_diffusers:
+                module.use_ada_layer_norm = False
+                module.use_ada_layer_norm_zero = False
+
+    return model
+
+
+
+
+
+def remove_patch(model: torch.nn.Module):
+    """ Removes a patch from a ToMe Diffusion module if it was already patched. """
+    # For diffusers
+    model = model.unet if hasattr(model, "unet") else model
+
+    for _, module in model.named_modules():
+        if hasattr(module, "_tome_info"):
+            for hook in module._tome_info["hooks"]:
+                hook.remove()
+            module._tome_info["hooks"].clear()
+
+        if module.__class__.__name__ == "ToMeBlock":
+            module.__class__ = module._parent
+    
+    return model
+
+File Path: tomesd/utils.py
+Content:
+import torch
+
+
+def isinstance_str(x: object, cls_name: str):
+    """
+    Checks whether x has any class *named* cls_name in its ancestry.
+    Doesn't require access to the class's implementation.
+    
+    Useful for patching!
+    """
+
+    for _cls in x.__class__.__mro__:
+        if _cls.__name__ == cls_name:
+            return True
+    
+    return False
+
+
+def init_generator(device: torch.device, fallback: torch.Generator=None):
+    """
+    Forks the current default random generator given device.
+    """
+    if device.type == "cpu":
+        return torch.Generator(device="cpu").set_state(torch.get_rng_state())
+    elif device.type == "cuda":
+        return torch.Generator(device=device).set_state(torch.cuda.get_rng_state())
+    else:
+        if fallback is None:
+            return init_generator(torch.device("cpu"))
+        else:
+            return fallback
+    
+Output:
+{
+    "experimental_code": "import torch\nfrom typing import Tuple, Callable\n\ndef do_nothing(x: torch.Tensor, mode:str=None):\n    return x\n\ndef mps_gather_workaround(input, dim, index):\n    if input.shape[-1] == 1:\n        return torch.gather(\n            input.unsqueeze(-1),\n            dim - 1 if dim < 0 else dim,\n            index.unsqueeze(-1)\n        ).squeeze(-1)\n    else:\n        return torch.gather(input, dim, index)\n\ndef bipartite_soft_matching_random2d(metric: torch.Tensor,\n                                     w: int, h: int, sx: int, sy: int, r: int,\n                                     no_rand: bool = False,\n                                     generator: torch.Generator = None) -> Tuple[Callable, Callable]:\n    B, N, _ = metric.shape\n    if r <= 0:\n        return do_nothing, do_nothing\n    gather = mps_gather_workaround if metric.device.type == \"mps\" else torch.gather\n    with torch.no_grad():\n        hsy, wsx = h // sy, w // sx\n        if no_rand:\n            rand_idx = torch.zeros(hsy, wsx, 1, device=metric.device, dtype=torch.int64)\n        else:\n            rand_idx = torch.randint(sy*sx, size=(hsy, wsx, 1), device=generator.device, generator=generator).to(metric.device)\n        idx_buffer_view = torch.zeros(hsy, wsx, sy*sx, device=metric.device, dtype=torch.int64)\n        idx_buffer_view.scatter_(dim=2, index=rand_idx, src=-torch.ones_like(rand_idx, dtype=rand_idx.dtype))\n        idx_buffer_view = idx_buffer_view.view(hsy, wsx, sy, sx).transpose(1, 2).reshape(hsy * sy, wsx * sx)\n        if (hsy * sy) < h or (wsx * sx) < w:\n            idx_buffer = torch.zeros(h, w, device=metric.device, dtype=torch.int64)\n            idx_buffer[:(hsy * sy), :(wsx * sx)] = idx_buffer_view\n        else:\n            idx_buffer = idx_buffer_view\n        rand_idx = idx_buffer.reshape(1, -1, 1).argsort(dim=1)\n        del idx_buffer, idx_buffer_view\n        num_dst = hsy * wsx\n        a_idx = rand_idx[:, num_dst:, :] # src\n        b_idx = rand_idx[:, :num_dst, :] # dst\n        def split(x):\n            C = x.shape[-1]\n            src = gather(x, dim=1, index=a_idx.expand(B, N - num_dst, C))\n            dst = gather(x, dim=1, index=b_idx.expand(B, num_dst, C))\n            return src, dst\n        metric = metric / metric.norm(dim=-1, keepdim=True)\n        a, b = split(metric)\n        scores = a @ b.transpose(-1, -2)\n        r = min(a.shape[1], r)\n        node_max, node_idx = scores.max(dim=-1)\n        edge_idx = node_max.argsort(dim=-1, descending=True)[..., None]\n        unm_idx = edge_idx[..., r:, :]  # Unmerged Tokens\n        src_idx = edge_idx[..., :r, :]  # Merged Tokens\n        dst_idx = gather(node_idx[..., None], dim=-2, index=src_idx)\n    def merge(x: torch.Tensor, mode=\"mean\") -> torch.Tensor:\n        src, dst = split(x)\n        n, t1, c = src.shape\n        unm = gather(src, dim=-2, index=unm_idx.expand(n, t1 - r, c))\n        src = gather(src, dim=-2, index=src_idx.expand(n, r, c))\n        dst = dst.scatter_reduce(-2, dst_idx.expand(n, r, c), src, reduce=mode)\n        return torch.cat([unm, dst], dim=1)\n    def unmerge(x: torch.Tensor) -> torch.Tensor:\n        unm_len = unm_idx.shape[1]\n        unm, dst = x[..., :unm_len, :], x[..., unm_len:, :]\n        _, _, c = unm.shape\n        src = gather(dst, dim=-2, index=dst_idx.expand(B, r, c))\n        out = torch.zeros(B, N, c, device=x.device, dtype=x.dtype)\n        out.scatter_(dim=-2, index=b_idx.expand(B, num_dst, c), src=dst)\n        out.scatter_(dim=-2, index=gather(a_idx.expand(B, a_idx.shape[1], 1), dim=1, index=unm_idx).expand(B, unm_len, c), src=unm)\n        out.scatter_(dim=-2, index=gather(a_idx.expand(B, a_idx.shape[1], 1), dim=1, index=src_idx).expand(B, r, c), src=src)\n        return out\n    return merge, unmerge\n\nimport math\nfrom typing import Type, Dict, Any\nfrom . import merge\nfrom .utils import isinstance_str, init_generator\n\ndef compute_merge(x: torch.Tensor, tome_info: Dict[str, Any]) -> Tuple[Callable, ...]:\n    original_h, original_w = tome_info[\"size\"]\n    original_tokens = original_h * original_w\n    downsample = int(math.ceil(math.sqrt(original_tokens // x.shape[1])))\n    args = tome_info[\"args\"]\n    if downsample <= args[\"max_downsample\"]:\n        w = int(math.ceil(original_w / downsample))\n        h = int(math.ceil(original_h / downsample))\n        r = int(x.shape[1] * args[\"ratio\"])\n        if args[\"generator\"] is None:\n            args[\"generator\"] = init_generator(x.device)\n        elif args[\"generator\"].device != x.device:\n            args[\"generator\"] = init_generator(x.device, fallback=args[\"generator\"])\n        use_rand = False if x.shape[0] % 2 == 1 else args[\"use_rand\"]\n        m, u = merge.bipartite_soft_matching_random2d(x, w, h, args[\"sx\"], args[\"sy\"], r, \n                                                      no_rand=not use_rand, generator=args[\"generator\"])\n    else:\n        m, u = (merge.do_nothing, merge.do_nothing)\n    m_a, u_a = (m, u) if args[\"merge_attn\"]      else (merge.do_nothing, merge.do_nothing)\n    m_c, u_c = (m, u) if args[\"merge_crossattn\"] else (merge.do_nothing, merge.do_nothing)\n    m_m, u_m = (m, u) if args[\"merge_mlp\"]       else (merge.do_nothing, merge.do_nothing)\n    return m_a, m_c, m_m, u_a, u_c, u_m\n\ndef make_diffusers_tome_block(block_class: Type[torch.nn.Module]) -> Type[torch.nn.Module]:\n    class ToMeBlock(block_class):\n        _parent = block_class\n        def forward(\n            self,\n            hidden_states,\n            attention_mask=None,\n            encoder_hidden_states=None,\n            encoder_attention_mask=None,\n            timestep=None,\n            cross_attention_kwargs=None,\n            class_labels=None,\n        ) -> torch.Tensor:\n            m_a, m_c, m_m, u_a, u_c, u_m = compute_merge(hidden_states, self._tome_info)\n            # ... (rest of the forward method applying merge/unmerge functions to attention and MLP outputs) ...\n            if self.use_ada_layer_norm:\n                norm_hidden_states = self.norm1(hidden_states, timestep)\n            elif self.use_ada_layer_norm_zero:\n                norm_hidden_states, gate_msa, shift_mlp, scale_mlp, gate_mlp = self.norm1(\n                    hidden_states, timestep, class_labels, hidden_dtype=hidden_states.dtype\n                )\n            else:\n                norm_hidden_states = self.norm1(hidden_states)\n            norm_hidden_states = m_a(norm_hidden_states)\n            cross_attention_kwargs = cross_attention_kwargs if cross_attention_kwargs is not None else {}\n            attn_output = self.attn1(\n                norm_hidden_states,\n                encoder_hidden_states=encoder_hidden_states if self.only_cross_attention else None,\n                attention_mask=attention_mask,\n                **cross_attention_kwargs,\n            )\n            hidden_states = u_a(attn_output) + hidden_states\n            if self.attn2 is not None:\n                norm_hidden_states = (\n                    self.norm2(hidden_states, timestep) if self.use_ada_layer_norm else self.norm2(hidden_states)\n                )\n                norm_hidden_states = m_c(norm_hidden_states)\n                attn_output = self.attn2(\n                    norm_hidden_states,\n                    encoder_hidden_states=encoder_hidden_states,\n                    attention_mask=encoder_attention_mask,\n                    **cross_attention_kwargs,\n                )\n                hidden_states = u_c(attn_output) + hidden_states\n            norm_hidden_states = self.norm3(hidden_states)\n            if self.use_ada_layer_norm_zero:\n                norm_hidden_states = norm_hidden_states * (1 + scale_mlp[:, None]) + shift_mlp[:, None]\n            norm_hidden_states = m_m(norm_hidden_states)\n            ff_output = self.ff(norm_hidden_states)\n            if self.use_ada_layer_norm_zero:\n                ff_output = gate_mlp.unsqueeze(1) * ff_output\n            hidden_states = u_m(ff_output) + hidden_states\n            return hidden_states\n    return ToMeBlock\n\ndef apply_patch(\n        model: torch.nn.Module,\n        ratio: float = 0.5,\n        max_downsample: int = 1,\n        sx: int = 2, sy: int = 2,\n        use_rand: bool = True,\n        merge_attn: bool = True,\n        merge_crossattn: bool = False,\n        merge_mlp: bool = False):\n    remove_patch(model)\n    is_diffusers = isinstance_str(model, \"DiffusionPipeline\") or isinstance_str(model, \"ModelMixin\")\n    if not is_diffusers:\n        if not hasattr(model, \"model\") or not hasattr(model.model, \"diffusion_model\"):\n            raise RuntimeError(\"Provided model was not a Stable Diffusion / Latent Diffusion model, as expected.\")\n        diffusion_model = model.model.diffusion_model\n    else:\n        diffusion_model = model.unet if hasattr(model, \"unet\") else model\n    diffusion_model._tome_info = {\n        \"size\": None,\n        \"hooks\": [],\n        \"args\": {\n            \"ratio\": ratio,\n            \"max_downsample\": max_downsample,\n            \"sx\": sx, \"sy\": sy,\n            \"use_rand\": use_rand,\n            \"generator\": None,\n            \"merge_attn\": merge_attn,\n            \"merge_crossattn\": merge_crossattn,\n            \"merge_mlp\": merge_mlp\n        }\n    }\n    hook_tome_model(diffusion_model)\n    for _, module in diffusion_model.named_modules():\n        if isinstance_str(module, \"BasicTransformerBlock\"):\n            make_tome_block_fn = make_diffusers_tome_block if is_diffusers else make_tome_block\n            module.__class__ = make_tome_block_fn(module.__class__)\n            module._tome_info = diffusion_model._tome_info\n            if not hasattr(module, \"disable_self_attn\") and not is_diffusers:\n                module.disable_self_attn = False\n            if not hasattr(module, \"use_ada_layer_norm_zero\") and is_diffusers:\n                module.use_ada_layer_norm = False\n                module.use_ada_layer_norm_zero = False\n    return model\n",
+    "experimental_info": "The provided repository content implements \"Token Merging for Stable Diffusion\" (ToMe), which is distinct from the \"encoder propagation\" and \"prior noise injection\" methods described in the prompt. The experimental settings related to the ToMe method are configured via the `apply_patch` function with the following parameters:\n- `ratio` (float): Determines the proportion of tokens to merge, directly impacting speedup and visual quality. E.g., 0.4 reduces tokens by 40%.\n- `max_downsample` (int): Specifies the maximum downsampling level of UNet layers to which ToMe is applied. Options are 1, 2, 4, or 8, indicating the scale of downsampling. Higher values apply ToMe to more layers.\n- `sx`, `sy` (int): Define the stride in the x and y dimensions used for selecting destination tokens in the bipartite soft matching algorithm. The default is (2, 2).\n- `use_rand` (bool): If true, enables random perturbations during the computation of destination token sets. Typically recommended to be on.\n- `merge_attn` (bool): Controls whether token merging is applied to self-attention layers. Recommended to be true.\n- `merge_crossattn` (bool): Controls whether token merging is applied to cross-attention layers. Not generally recommended to be true.\n- `merge_mlp` (bool): Controls whether token merging is applied to Multi-Layer Perceptron (MLP) blocks. Generally not recommended to be true.\n\nThe `tomesd` repository focuses on spatially reducing tokens within transformer blocks for efficiency, which is a different mechanism than the temporal feature reuse and noise injection described in the \"Method\" section of the prompt."
+}
