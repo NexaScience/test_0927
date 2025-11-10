@@ -1,7 +1,7 @@
 {
-  "research_topic": "diffusion modelの速度改善",
+  "research_topic": "Improving efficiency of hyperparameter optimization",
   "queries": [
-    "diffusion model acceleration"
+    "efficient hyperparameter optimization"
   ],
   "research_study_list": [
     {
