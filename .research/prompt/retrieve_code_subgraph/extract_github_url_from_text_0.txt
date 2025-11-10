@@ -7,11 +7,11 @@ You carefully read the contents of the “Paper Outline” and select one GitHub
 - Be sure to select only one GitHub URL.
 - If there is no related GitHub link, output None.
 # Paper Outline
-The methodology is based on an empirical analysis of UNet encoder and decoder features, revealing minimal variation in encoder features and substantial variation in decoder features across time-steps. This insight motivates 'encoder propagation,' where encoder computations are omitted at certain adjacent non-key time-steps, and pre-computed encoder features from previous key time-steps are reused as input for multiple subsequent decoder steps. These multiple decoder steps can then be processed in parallel. Both uniform and non-uniform strategies for selecting key time-steps are explored, with non-uniform performing better. Additionally, a prior noise injection method (combining initial latent code zT into subsequent steps from a specific time-step τ) is introduced to preserve texture details.
+BOIL operates by considering the joint space of input hyperparameters and the number of training iterations. It compresses the full training curve into a numeric score using a user-preferred Sigmoid function, parameterized by a growth parameter (g0) and a middle point (m0), which are learned by maximizing the Gaussian Process (GP) log marginal likelihood. A cost-sensitive black-box function is modeled using a GP with a product kernel combining similarities over parameter and iteration spaces, while the training cost is approximated by a linear regressor. The next point to evaluate is selected by maximizing a cost-aware acquisition function (a modified Expected Improvement criterion). To enhance sample-efficiency and prevent GP covariance matrix ill-conditioning, BOIL uses a data augmentation technique that selectively samples a subset of points from the observed training curve based on maximal GP predictive uncertainty, adaptively limiting the number of samples to maintain good matrix conditioning.
 
 # GitHub URLs List
-['https://github.com/deep-floyd/IF', 'https://github.com/facebookresearch/fvcore', 'https://github.com/LuChengTHU/dpm-solver', 'https://github.com/dbolya/tomesd', 'https://github.com/Picsart-AI-Research/Text2Video-Zero', 'https://github.com/lllyasviel/ControlNet', 'https://github.com/google/dreambooth', 'https://github.com/adobe-research/custom-diffusion']
+['https://github.com/ntienvu/BOIL']
 Output:
 {
-    "index": 3
+    "index": 0
 }
