@@ -1,0 +1,105 @@
+experiments:
+  # ---------------------- BOIL (baseline) ----------------------
+  - run_id: boil_cartpole_smoke
+    description: |
+      Smoke-test baseline: vanilla BOIL without stability penalty on CartPole-v1
+      (DQN agent).  Drastically reduced training steps for quick execution.
+    seed: 111
+    dataset:
+      type: rl
+      env_name: CartPole-v1
+    model:
+      algorithm: dqn
+    training:
+      total_timesteps: 2000       # tiny budget for smoke test
+      eval_interval: 500
+      eval_episodes: 3
+    algorithm:
+      type: boil
+      use_sacc: false
+      lambda: 0.0
+      random_initial_points: 1
+      total_evaluations: 4
+      tail_frac: 0.1
+    search_space:
+      learning_rate: {min: 1e-4, max: 5e-3}
+      gamma:          {min: 0.8,  max: 0.999}
+      target_update_interval: {min: 100, max: 1000}
+
+  # ---------------------- BOIL + SACC --------------------------
+  - run_id: boil_sacc_cartpole_smoke
+    description: |
+      Smoke-test SACC variant: BOIL with Stability-Aware Curve Compression.
+    seed: 112
+    dataset:
+      type: rl
+      env_name: CartPole-v1
+    model:
+      algorithm: dqn
+    training:
+      total_timesteps: 2000
+      eval_interval: 500
+      eval_episodes: 3
+    algorithm:
+      type: boil
+      use_sacc: true
+      lambda: 1.0
+      learn_lambda: true
+      random_initial_points: 1
+      total_evaluations: 4
+      tail_frac: 0.1
+    search_space:
+      learning_rate: {min: 1e-4, max: 5e-3}
+      gamma:          {min: 0.8,  max: 0.999}
+      target_update_interval: {min: 100, max: 1000}
+
+  # ---------------------- BOIL + SACC (tail=0.2) ---------------
+  - run_id: boil_sacc_tail0_2_cartpole_smoke
+    description: |
+      Smoke-test SACC with larger tail-fraction (0.2).
+    seed: 113
+    dataset:
+      type: rl
+      env_name: CartPole-v1
+    model:
+      algorithm: dqn
+    training:
+      total_timesteps: 2000
+      eval_interval: 500
+      eval_episodes: 3
+    algorithm:
+      type: boil
+      use_sacc: true
+      lambda: 1.0
+      learn_lambda: true
+      random_initial_points: 1
+      total_evaluations: 4
+      tail_frac: 0.2
+    search_space:
+      learning_rate: {min: 1e-4, max: 5e-3}
+      gamma:          {min: 0.8,  max: 0.999}
+      target_update_interval: {min: 100, max: 1000}
+
+  # ---------------------- TPE baseline -------------------------
+  - run_id: tpe_cartpole_smoke
+    description: |
+      Smoke-test TPE hyper-parameter optimisation baseline.
+    seed: 114
+    dataset:
+      type: rl
+      env_name: CartPole-v1
+    model:
+      algorithm: dqn
+    training:
+      total_timesteps: 2000
+      eval_interval: 500
+      eval_episodes: 3
+    algorithm:
+      type: tpe
+      random_initial_points: 0
+      total_evaluations: 4
+      tail_frac: 0.1
+    search_space:
+      learning_rate: {min: 1e-4, max: 5e-3}
+      gamma:          {min: 0.8,  max: 0.999}
+      target_update_interval: {min: 100, max: 1000}

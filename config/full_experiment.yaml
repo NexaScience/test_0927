@@ -1,0 +1,128 @@
+experiments:
+  # -------------------------------------------------------------------
+  # 1. Vanilla BOIL – baseline (DQN on Stochastic CartPole)
+  # -------------------------------------------------------------------
+  - run_id: boil_stoch_cartpole
+    description: |
+      Baseline: vanilla BOIL with logistic curve compression (λ=0) tuning a DQN
+      on Stochastic-CartPole (sticky actions 0.5).  Larger budget and search
+      space reflective of the robustness-efficiency study.
+    seed: 2001
+    dataset:
+      type: rl
+      env_name: CartPole-v1   # A stochastic variant will be created via env wrapper inside experiment script.
+    model:
+      algorithm: dqn
+    training:
+      total_timesteps: 50000
+      eval_interval: 5000
+      eval_episodes: 10
+    algorithm:
+      type: boil
+      use_sacc: false
+      lambda: 0.0
+      random_initial_points: 5
+      total_evaluations: 40
+      tail_frac: 0.1
+    search_space:
+      learning_rate: {min: 1e-4, max: 1e-2}
+      gamma:          {min: 0.8,  max: 0.999}
+      target_update_interval: {min: 100, max: 2000}
+
+  # -------------------------------------------------------------------
+  # 2. BOIL + SACC (ours)
+  # -------------------------------------------------------------------
+  - run_id: boil_sacc_stoch_cartpole
+    description: |
+      Proposed method: BOIL with Stability-Aware Curve Compression.  λ is
+      optimised jointly with other transform parameters.
+    seed: 2002
+    dataset:
+      type: rl
+      env_name: CartPole-v1
+    model:
+      algorithm: dqn
+    training:
+      total_timesteps: 50000
+      eval_interval: 5000
+      eval_episodes: 10
+    algorithm:
+      type: boil
+      use_sacc: true
+      lambda: 1.0
+      learn_lambda: true
+      random_initial_points: 5
+      total_evaluations: 40
+      tail_frac: 0.1
+    search_space:
+      learning_rate: {min: 1e-4, max: 1e-2}
+      gamma:          {min: 0.8,  max: 0.999}
+      target_update_interval: {min: 100, max: 2000}
+
+  # -------------------------------------------------------------------
+  # 3. BOIL + SACC with larger tail fraction (ablation)
+  # -------------------------------------------------------------------
+  - run_id: boil_sacc_tail0_2_stoch_cartpole
+    description: |
+      Ablation: identical to `boil_sacc_stoch_cartpole` but uses a tail-fraction
+      of 0.2 in the stability penalty.
+    seed: 2003
+    dataset:
+      type: rl
+      env_name: CartPole-v1
+    model:
+      algorithm: dqn
+    training:
+      total_timesteps: 50000
+      eval_interval: 5000
+      eval_episodes: 10
+    algorithm:
+      type: boil
+      use_sacc: true
+      lambda: 1.0
+      learn_lambda: true
+      random_initial_points: 5
+      total_evaluations: 40
+      tail_frac: 0.2
+    search_space:
+      learning_rate: {min: 1e-4, max: 1e-2}
+      gamma:          {min: 0.8,  max: 0.999}
+      target_update_interval: {min: 100, max: 2000}
+
+  # -------------------------------------------------------------------
+  # 4. TPE hyper-parameter optimisation baseline
+  # -------------------------------------------------------------------
+  - run_id: tpe_stoch_cartpole
+    description: |
+      Baseline hyper-parameter optimiser: Optuna TPE on the same search space
+      and budget.
+    seed: 2004
+    dataset:
+      type: rl
+      env_name: CartPole-v1
+    model:
+      algorithm: dqn
+    training:
+      total_timesteps: 50000
+      eval_interval: 5000
+      eval_episodes: 10
+    algorithm:
+      type: tpe
+      random_initial_points: 0
+      total_evaluations: 40
+      tail_frac: 0.1
+    search_space:
+      learning_rate: {min: 1e-4, max: 1e-2}
+      gamma:          {min: 0.8,  max: 0.999}
+      target_update_interval: {min: 100, max: 2000}
+
+# ---------------------------------------------------------------------
+# The MuJoCo-based Hopper / HalfCheetah experiments are omitted here to
+# avoid external binary dependencies.  They can be added by copying one
+# of the above blocks and changing `env_name`, `model.algorithm` to
+# `ppo`, and extending the search space with PPO-specific parameters
+# (gae_lambda, clip_eps, entropy_coef, batch_size).
+# ---------------------------------------------------------------------
+
+
+

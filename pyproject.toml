@@ -1,1 +1,28 @@
-# Please list the required python packages.
+[build-system]
+requires = ["setuptools", "wheel"]
+
+[project]
+name = "boil-sacc-framework"
+version = "0.1.0"
+description = "BOIL/BOIL+SACC experimental framework"
+requires-python = ">=3.10"
+authors = [
+    { name = "Research Automation", email = "research@example.com" }
+]
+license = { text = "Apache-2.0" }
+
+[project.dependencies]
+torch = "*"
+numpy = "*"
+matplotlib = "*"
+seaborn = "*"
+pyyaml = "*"
+tqdm = "*"
+scikit-learn = "*"
+scipy = "*"
+# RL & hyper-parameter optimisation libs
+stable-baselines3 = "*"
+gymnasium = "*"
+optuna = "*"
+# Optional: Hugging Face datasets for supervised variant
+datasets = "*"
