@@ -1,0 +1,109 @@
+experiments:
+  # ---- baseline: vanilla sigmoid compressor ----
+  - run_id: smoke_dummy_boil
+    description: |
+      Smoke-test baseline: vanilla BOIL (sigmoid compressor) on dummy dataset.
+    seed: 111
+    dataset:
+      name: dummy
+      batch_size: 32
+    model:
+      name: dummy_classifier
+      input_dim: 10
+      num_classes: 2
+    algorithm:
+      type: boil
+      compression: sigmoid
+      random_initial_points: 1
+      total_evaluations: 2
+      tail_frac: 0.1
+    search_space:
+      learning_rate: {min: 1e-4, max: 5e-3}
+
+  # ---- proposed: sigmoid + SACC (λ learned) ----
+  - run_id: smoke_dummy_sacc
+    description: |
+      Smoke-test: BOIL + SACC (learn λ) on dummy dataset.
+    seed: 222
+    dataset:
+      name: dummy
+      batch_size: 32
+    model:
+      name: dummy_classifier
+      input_dim: 10
+      num_classes: 2
+    algorithm:
+      type: boil
+      compression: sigmoid+sacc
+      lambda: 1.0
+      learn_lambda: true
+      random_initial_points: 1
+      total_evaluations: 2
+      tail_frac: 0.1
+    search_space:
+      learning_rate: {min: 1e-4, max: 5e-3}
+
+  # ---- ablation: sigmoid + SACC with fixed λ ----
+  - run_id: smoke_dummy_sacc_fixed
+    description: |
+      Smoke-test ablation: BOIL + SACC with fixed λ (no learning).
+    seed: 333
+    dataset:
+      name: dummy
+      batch_size: 32
+    model:
+      name: dummy_classifier
+      input_dim: 10
+      num_classes: 2
+    algorithm:
+      type: boil
+      compression: sigmoid+sacc
+      lambda: 2.0
+      learn_lambda: false
+      random_initial_points: 1
+      total_evaluations: 2
+      tail_frac: 0.1
+    search_space:
+      learning_rate: {min: 1e-4, max: 5e-3}
+
+  # ---- alternative compressor: last10-average ----
+  - run_id: smoke_dummy_last10
+    description: |
+      Smoke-test: alternative curve compressor – average of last 10 %.
+    seed: 444
+    dataset:
+      name: dummy
+      batch_size: 32
+    model:
+      name: dummy_classifier
+      input_dim: 10
+      num_classes: 2
+    algorithm:
+      type: boil
+      compression: last10-average
+      random_initial_points: 1
+      total_evaluations: 2
+      tail_frac: 0.1
+    search_space:
+      learning_rate: {min: 1e-4, max: 5e-3}
+
+  # ---- ASHA baseline (random search surrogate) ----
+  - run_id: smoke_dummy_asha
+    description: |
+      Smoke-test baseline: ASHA-like random sampling (no BO) on dummy dataset.
+    seed: 555
+    dataset:
+      name: dummy
+      batch_size: 32
+    model:
+      name: dummy_classifier
+      input_dim: 10
+      num_classes: 2
+    algorithm:
+      type: asha
+      compression: sigmoid
+      random_initial_points: 0
+      total_evaluations: 2
+      tail_frac: 0.1
+    search_space:
+      learning_rate: {min: 1e-4, max: 5e-3}

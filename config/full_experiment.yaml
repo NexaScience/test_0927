@@ -1,0 +1,338 @@
+experiments:
+  # ---------------------------------------------------------------------------
+  # CartPole-v1  (3 × 5 variations = 15 total experiments)
+  # ---------------------------------------------------------------------------
+  - run_id: cartpole_boil
+    description: Vanilla BOIL on CartPole-v1.
+    seed: 0
+    dataset:
+      name: gym
+      env_name: CartPole-v1
+      train_episodes: 500
+    model:
+      name: dqn
+    algorithm:
+      type: boil
+      compression: sigmoid
+      random_initial_points: 5
+      total_evaluations: 25
+      tail_frac: 0.1
+      success_threshold: 195
+    search_space:
+      learning_rate: {min: 1e-5, max: 1e-2}
+      target_update: {min: 100, max: 2000}
+      epsilon_final: {min: 0.01, max: 0.2}
+
+  - run_id: cartpole_sacc
+    description: BOIL + SACC (learn λ) on CartPole-v1.
+    seed: 1
+    dataset:
+      name: gym
+      env_name: CartPole-v1
+      train_episodes: 500
+    model:
+      name: dqn
+    algorithm:
+      type: boil
+      compression: sigmoid+sacc
+      lambda: 1.0
+      learn_lambda: true
+      random_initial_points: 5
+      total_evaluations: 25
+      tail_frac: 0.1
+      success_threshold: 195
+    search_space:
+      learning_rate: {min: 1e-5, max: 1e-2}
+      target_update: {min: 100, max: 2000}
+      epsilon_final: {min: 0.01, max: 0.2}
+
+  - run_id: cartpole_sacc_fixed
+    description: BOIL + SACC with fixed λ (ablation) on CartPole-v1.
+    seed: 2
+    dataset:
+      name: gym
+      env_name: CartPole-v1
+      train_episodes: 500
+    model:
+      name: dqn
+    algorithm:
+      type: boil
+      compression: sigmoid+sacc
+      lambda: 1.0  # fixed
+      learn_lambda: false
+      random_initial_points: 5
+      total_evaluations: 25
+      tail_frac: 0.1
+      success_threshold: 195
+    search_space:
+      learning_rate: {min: 1e-5, max: 1e-2}
+      target_update: {min: 100, max: 2000}
+      epsilon_final: {min: 0.01, max: 0.2}
+
+  - run_id: cartpole_last10
+    description: Alternative compressor (last 10 % average) on CartPole-v1.
+    seed: 3
+    dataset:
+      name: gym
+      env_name: CartPole-v1
+      train_episodes: 500
+    model:
+      name: dqn
+    algorithm:
+      type: boil
+      compression: last10-average
+      random_initial_points: 5
+      total_evaluations: 25
+      tail_frac: 0.1
+      success_threshold: 195
+    search_space:
+      learning_rate: {min: 1e-5, max: 1e-2}
+      target_update: {min: 100, max: 2000}
+      epsilon_final: {min: 0.01, max: 0.2}
+
+  - run_id: cartpole_asha
+    description: ASHA baseline (random search) on CartPole-v1.
+    seed: 4
+    dataset:
+      name: gym
+      env_name: CartPole-v1
+      train_episodes: 500
+    model:
+      name: dqn
+    algorithm:
+      type: asha
+      compression: sigmoid
+      random_initial_points: 0
+      total_evaluations: 25
+      tail_frac: 0.1
+      success_threshold: 195
+    search_space:
+      learning_rate: {min: 1e-5, max: 1e-2}
+      target_update: {min: 100, max: 2000}
+      epsilon_final: {min: 0.01, max: 0.2}
+
+  # ---------------------------------------------------------------------------
+  # LunarLander-v2
+  # ---------------------------------------------------------------------------
+  - run_id: lunarlander_boil
+    description: Vanilla BOIL on LunarLander-v2.
+    seed: 10
+    dataset:
+      name: gym
+      env_name: LunarLander-v2
+      train_episodes: 500
+    model:
+      name: dqn
+    algorithm:
+      type: boil
+      compression: sigmoid
+      random_initial_points: 5
+      total_evaluations: 25
+      tail_frac: 0.1
+      success_threshold: 200
+    search_space:
+      learning_rate: {min: 1e-5, max: 1e-2}
+      target_update: {min: 100, max: 2000}
+      epsilon_final: {min: 0.01, max: 0.2}
+
+  - run_id: lunarlander_sacc
+    description: BOIL + SACC (learn λ) on LunarLander-v2.
+    seed: 11
+    dataset:
+      name: gym
+      env_name: LunarLander-v2
+      train_episodes: 500
+    model:
+      name: dqn
+    algorithm:
+      type: boil
+      compression: sigmoid+sacc
+      lambda: 1.0
+      learn_lambda: true
+      random_initial_points: 5
+      total_evaluations: 25
+      tail_frac: 0.1
+      success_threshold: 200
+    search_space:
+      learning_rate: {min: 1e-5, max: 1e-2}
+      target_update: {min: 100, max: 2000}
+      epsilon_final: {min: 0.01, max: 0.2}
+
+  - run_id: lunarlander_sacc_fixed
+    description: BOIL + SACC fixed λ on LunarLander-v2.
+    seed: 12
+    dataset:
+      name: gym
+      env_name: LunarLander-v2
+      train_episodes: 500
+    model:
+      name: dqn
+    algorithm:
+      type: boil
+      compression: sigmoid+sacc
+      lambda: 1.0
+      learn_lambda: false
+      random_initial_points: 5
+      total_evaluations: 25
+      tail_frac: 0.1
+      success_threshold: 200
+    search_space:
+      learning_rate: {min: 1e-5, max: 1e-2}
+      target_update: {min: 100, max: 2000}
+      epsilon_final: {min: 0.01, max: 0.2}
+
+  - run_id: lunarlander_last10
+    description: Last10-average compressor on LunarLander-v2.
+    seed: 13
+    dataset:
+      name: gym
+      env_name: LunarLander-v2
+      train_episodes: 500
+    model:
+      name: dqn
+    algorithm:
+      type: boil
+      compression: last10-average
+      random_initial_points: 5
+      total_evaluations: 25
+      tail_frac: 0.1
+      success_threshold: 200
+    search_space:
+      learning_rate: {min: 1e-5, max: 1e-2}
+      target_update: {min: 100, max: 2000}
+      epsilon_final: {min: 0.01, max: 0.2}
+
+  - run_id: lunarlander_asha
+    description: ASHA baseline on LunarLander-v2.
+    seed: 14
+    dataset:
+      name: gym
+      env_name: LunarLander-v2
+      train_episodes: 500
+    model:
+      name: dqn
+    algorithm:
+      type: asha
+      compression: sigmoid
+      random_initial_points: 0
+      total_evaluations: 25
+      tail_frac: 0.1
+      success_threshold: 200
+    search_space:
+      learning_rate: {min: 1e-5, max: 1e-2}
+      target_update: {min: 100, max: 2000}
+      epsilon_final: {min: 0.01, max: 0.2}
+
+  # ---------------------------------------------------------------------------
+  # Acrobot-v1   (note success threshold is −100; higher is better but negative)
+  # ---------------------------------------------------------------------------
+  - run_id: acrobot_boil
+    description: Vanilla BOIL on Acrobot-v1.
+    seed: 20
+    dataset:
+      name: gym
+      env_name: Acrobot-v1
+      train_episodes: 500
+    model:
+      name: dqn
+    algorithm:
+      type: boil
+      compression: sigmoid
+      random_initial_points: 5
+      total_evaluations: 25
+      tail_frac: 0.1
+      success_threshold: -100
+    search_space:
+      learning_rate: {min: 1e-5, max: 1e-2}
+      target_update: {min: 100, max: 2000}
+      epsilon_final: {min: 0.01, max: 0.2}
+
+  - run_id: acrobot_sacc
+    description: BOIL + SACC (learn λ) on Acrobot-v1.
+    seed: 21
+    dataset:
+      name: gym
+      env_name: Acrobot-v1
+      train_episodes: 500
+    model:
+      name: dqn
+    algorithm:
+      type: boil
+      compression: sigmoid+sacc
+      lambda: 1.0
+      learn_lambda: true
+      random_initial_points: 5
+      total_evaluations: 25
+      tail_frac: 0.1
+      success_threshold: -100
+    search_space:
+      learning_rate: {min: 1e-5, max: 1e-2}
+      target_update: {min: 100, max: 2000}
+      epsilon_final: {min: 0.01, max: 0.2}
+
+  - run_id: acrobot_sacc_fixed
+    description: BOIL + SACC fixed λ on Acrobot-v1.
+    seed: 22
+    dataset:
+      name: gym
+      env_name: Acrobot-v1
+      train_episodes: 500
+    model:
+      name: dqn
+    algorithm:
+      type: boil
+      compression: sigmoid+sacc
+      lambda: 1.0
+      learn_lambda: false
+      random_initial_points: 5
+      total_evaluations: 25
+      tail_frac: 0.1
+      success_threshold: -100
+    search_space:
+      learning_rate: {min: 1e-5, max: 1e-2}
+      target_update: {min: 100, max: 2000}
+      epsilon_final: {min: 0.01, max: 0.2}
+
+  - run_id: acrobot_last10
+    description: Last10-average compressor on Acrobot-v1.
+    seed: 23
+    dataset:
+      name: gym
+      env_name: Acrobot-v1
+      train_episodes: 500
+    model:
+      name: dqn
+    algorithm:
+      type: boil
+      compression: last10-average
+      random_initial_points: 5
+      total_evaluations: 25
+      tail_frac: 0.1
+      success_threshold: -100
+    search_space:
+      learning_rate: {min: 1e-5, max: 1e-2}
+      target_update: {min: 100, max: 2000}
+      epsilon_final: {min: 0.01, max: 0.2}
+
+  - run_id: acrobot_asha
+    description: ASHA baseline on Acrobot-v1.
+    seed: 24
+    dataset:
+      name: gym
+      env_name: Acrobot-v1
+      train_episodes: 500
+    model:
+      name: dqn
+    algorithm:
+      type: asha
+      compression: sigmoid
+      random_initial_points: 0
+      total_evaluations: 25
+      tail_frac: 0.1
+      success_threshold: -100
+    search_space:
+      learning_rate: {min: 1e-5, max: 1e-2}
+      target_update: {min: 100, max: 2000}
+      epsilon_final: {min: 0.01, max: 0.2}
+
+# End of full experiment configuration
