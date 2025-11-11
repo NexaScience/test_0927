@@ -86,6 +86,11 @@
             "result": "",
             "error": "",
             "image_file_name_list": []
+          },
+          "evaluation": {
+            "consistency_score": 2,
+            "consistency_feedback": "The experiment is well-described on paper and the design matches the unified strategy (tasks, baselines, metrics, 10 seeds, statistical tests).  However, no code artefacts were produced and no numerical outputs are reported (Result / Error fields are empty).  Consequently:\n\n1. Experimental Strategy Issues – none major: the planned comparison set and metrics are appropriate, but without execution no practical adequacy can be judged.\n\n2. Implementation Issues – critical: the generated-code placeholders are empty, so the experiment never ran.  The GP, SACC transform, BO loop and profiling hooks are not implemented, preventing any data collection.\n\n3. Result Interpretation Issues – critical: with no results, the paper cannot claim faster convergence, higher performance or stability benefits.  No statistical tests, plots or overhead numbers exist.\n\nImpact on inclusion: In its current state the experiment cannot support the paper’s core claims and should not be included until it is executed and produces analyzable data.\n\nSuggested next steps (scientific viewpoint only):\n• Provide the missing implementation and ensure the experiment executes end-to-end across the 10 seeds.\n• Collect and report the specified primary and secondary metrics with CIs and significance tests.\n• Verify that BOIL+SACC outperforms baselines before reinserting the experiment into the manuscript.",
+            "is_selected_for_paper": true
           }
         },
         {
@@ -116,6 +121,11 @@
             "result": "",
             "error": "",
             "image_file_name_list": []
+          },
+          "evaluation": {
+            "consistency_score": 2,
+            "consistency_feedback": "The experiment description, hypotheses, metrics and stress settings are all well aligned with the overall experimental strategy: they directly target sample-efficiency, stability, sensitivity to K, and computational overhead on harder MuJoCo tasks and a noisy Cart-Pole variant.  Thus, at the level of Experimental Strategy the design is scientifically sound and appropriate for validating SACC.\n\nHowever, no executable code artefacts are provided (all code files are empty) and the result section is blank (Result: \"\", Error: \"\", Images: []).  Therefore the experiment has not been run and generates no empirical evidence.  Without curves, numerical tables or statistical tests, none of the main claims (≥20 % faster, ≥25 % more stable, negligible overhead) can be evaluated.\n\nProblem Categorisation and Impact:\n1. Implementation Issues – Critical\n   • The promised implementation (run_hpo.py, PPO integration, nvidia-smi profiler, etc.) is absent.  The experiment cannot execute.\n   • Consequence: zero data, so the scientific questions are unanswered.\n2. Result Interpretation Issues – Critical\n   • Because there are no results, any interpretation or claim of superiority would be speculative.  The paper would risk over-claiming.\n3. Experimental Strategy Issues – Minor/None\n   • The experiment design itself is fine; the problem is absence of execution, not strategy.\n\nIn its current state the experiment should NOT be included in the paper.  It must at least run successfully and provide numerical outcomes with statistical analysis before it can support the manuscript’s conclusions.",
+            "is_selected_for_paper": true
           }
         }
       ],
