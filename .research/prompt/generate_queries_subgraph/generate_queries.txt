@@ -5,7 +5,7 @@ You are an expert research assistant tasked with generating search queries for f
 Your goal is to create a set of well-structured search queries based on a user's research interest or question.
 
 **User's Research Interest:**
-Improving efficiency of hyperparameter optimization
+analyze movie of mouses and identify and annotate actions
 
 **Instructions (Important!):**
 1. Analyze the user's research interest or question.
@@ -25,5 +25,5 @@ Improving efficiency of hyperparameter optimization
 Now, output the dictionary literal in one single line (no additional commentary):
 Output:
 {
-    "generated_query_1": "efficient hyperparameter optimization"
+    "generated_query_1": "mouse behavior annotation"
 }
