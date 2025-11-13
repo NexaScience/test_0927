@@ -1,0 +1,129 @@
+# Smoke test configuration – lightweight versions of all five run variations.
+experiments:
+  - run_id: smoke_rhoBYOL_uniform
+    description: |
+      Smoke-test: Uniform BYOL (baseline) with synthetic dataset.
+    seed: 123
+    dataset:
+      name: synthetic
+      root: ./data/synthetic
+      params:
+        num_samples: 20
+        clip_len: 8
+    model:
+      type: r3d_18
+      proj_hidden_dim: 512
+      proj_output_dim: 128
+    algorithm:
+      type: BYOL
+      ema_decay: 0.996
+      mixed_precision: true
+      params: {}
+    training:
+      epochs: 2
+      batch_size: 4
+      learning_rate: 3e-4
+
+  - run_id: smoke_TW_BYOL_tau15
+    description: |
+      Smoke-test: TW-BYOL with τ=15 (synthetic dataset).
+    seed: 123
+    dataset:
+      name: synthetic
+      root: ./data/synthetic
+      params:
+        num_samples: 20
+        clip_len: 8
+    model:
+      type: r3d_18
+      proj_hidden_dim: 512
+      proj_output_dim: 128
+    algorithm:
+      type: TW-BYOL
+      ema_decay: 0.996
+      mixed_precision: true
+      params:
+        tau: 15
+        weight_mode: exponential
+    training:
+      epochs: 2
+      batch_size: 4
+      learning_rate: 3e-4
+
+  - run_id: smoke_TW_BYOL_tau30
+    description: |
+      Smoke-test: TW-BYOL with τ=30 (synthetic dataset).
+    seed: 123
+    dataset:
+      name: synthetic
+      root: ./data/synthetic
+      params:
+        num_samples: 20
+        clip_len: 8
+    model:
+      type: r3d_18
+      proj_hidden_dim: 512
+      proj_output_dim: 128
+    algorithm:
+      type: TW-BYOL
+      ema_decay: 0.996
+      mixed_precision: true
+      params:
+        tau: 30
+        weight_mode: exponential
+    training:
+      epochs: 2
+      batch_size: 4
+      learning_rate: 3e-4
+
+  - run_id: smoke_TW_BYOL_tau60
+    description: |
+      Smoke-test: TW-BYOL with τ=60 (synthetic dataset).
+    seed: 123
+    dataset:
+      name: synthetic
+      root: ./data/synthetic
+      params:
+        num_samples: 20
+        clip_len: 8
+    model:
+      type: r3d_18
+      proj_hidden_dim: 512
+      proj_output_dim: 128
+    algorithm:
+      type: TW-BYOL
+      ema_decay: 0.996
+      mixed_precision: true
+      params:
+        tau: 60
+        weight_mode: exponential
+    training:
+      epochs: 2
+      batch_size: 4
+      learning_rate: 3e-4
+
+  - run_id: smoke_TW_BYOL_binary_cutoff
+    description: |
+      Smoke-test: TW-BYOL with binary cutoff weighting (τ=30).
+    seed: 123
+    dataset:
+      name: synthetic
+      root: ./data/synthetic
+      params:
+        num_samples: 20
+        clip_len: 8
+    model:
+      type: r3d_18
+      proj_hidden_dim: 512
+      proj_output_dim: 128
+    algorithm:
+      type: TW-BYOL
+      ema_decay: 0.996
+      mixed_precision: true
+      params:
+        tau: 30
+        weight_mode: binary
+    training:
+      epochs: 2
+      batch_size: 4
+      learning_rate: 3e-4

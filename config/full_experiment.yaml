@@ -1,0 +1,125 @@
+# Full experiment configuration for exp-main-perf-ablation
+experiments:
+  - run_id: rhoBYOL-uniform
+    description: |
+      Baseline implementation of ρBYOL with uniform weighting (standard BYOL
+      loss). SlowFast-like video backbone approximated by r3d_18.
+    seed: 101
+    dataset:
+      name: mabe22
+      root: /data/mabe22
+      params:
+        clip_len: 30
+    model:
+      type: r3d_18
+      proj_hidden_dim: 4096
+      proj_output_dim: 256
+    algorithm:
+      type: BYOL
+      ema_decay: 0.996
+      mixed_precision: true
+      params: {}
+    training:
+      epochs: 50
+      batch_size: 64
+      learning_rate: 3e-4
+
+  - run_id: TW-BYOL-tau15
+    description: |
+      Time-Weighted BYOL with exponential weighting (τ=15 frames).
+    seed: 102
+    dataset:
+      name: mabe22
+      root: /data/mabe22
+      params:
+        clip_len: 30
+    model:
+      type: r3d_18
+      proj_hidden_dim: 4096
+      proj_output_dim: 256
+    algorithm:
+      type: TW-BYOL
+      ema_decay: 0.996
+      mixed_precision: true
+      params:
+        tau: 15
+        weight_mode: exponential
+    training:
+      epochs: 50
+      batch_size: 64
+      learning_rate: 3e-4
+
+  - run_id: TW-BYOL-tau30
+    description: |
+      Time-Weighted BYOL with exponential weighting (τ=30 frames).
+    seed: 103
+    dataset:
+      name: mabe22
+      root: /data/mabe22
+      params:
+        clip_len: 30
+    model:
+      type: r3d_18
+      proj_hidden_dim: 4096
+      proj_output_dim: 256
+    algorithm:
+      type: TW-BYOL
+      ema_decay: 0.996
+      mixed_precision: true
+      params:
+        tau: 30
+        weight_mode: exponential
+    training:
+      epochs: 50
+      batch_size: 64
+      learning_rate: 3e-4
+
+  - run_id: TW-BYOL-tau60
+    description: |
+      Time-Weighted BYOL with exponential weighting (τ=60 frames).
+    seed: 104
+    dataset:
+      name: mabe22
+      root: /data/mabe22
+      params:
+        clip_len: 30
+    model:
+      type: r3d_18
+      proj_hidden_dim: 4096
+      proj_output_dim: 256
+    algorithm:
+      type: TW-BYOL
+      ema_decay: 0.996
+      mixed_precision: true
+      params:
+        tau: 60
+        weight_mode: exponential
+    training:
+      epochs: 50
+      batch_size: 64
+      learning_rate: 3e-4
+
+  - run_id: TW-BYOL-binary-cutoff
+    description: |
+      Ablation – Time-Weighted BYOL with hard binary cutoff (τ=30 frames).
+    seed: 105
+    dataset:
+      name: mabe22
+      root: /data/mabe22
+      params:
+        clip_len: 30
+    model:
+      type: r3d_18
+      proj_hidden_dim: 4096
+      proj_output_dim: 256
+    algorithm:
+      type: TW-BYOL
+      ema_decay: 0.996
+      mixed_precision: true
+      params:
+        tau: 30
+        weight_mode: binary
+    training:
+      epochs: 50
+      batch_size: 64
+      learning_rate: 3e-4
