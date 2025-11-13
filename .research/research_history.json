@@ -93,7 +93,13 @@
       "expected_datasets": [
         "MABe22",
         "RatSI"
-      ]
+      ],
+      "external_resources": {
+        "hugging_face": {
+          "models": [],
+          "datasets": []
+        }
+      }
     }
   },
   "idea_info_history": [
