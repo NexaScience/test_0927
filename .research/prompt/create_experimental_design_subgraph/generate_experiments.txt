@@ -63,77 +63,79 @@ RAM：2048 GB
 
 # Current Research Method (Target for Experiment Design)
 {
-    "Open Problems": "In BOIL the whole learning curve is compressed into a single scalar through a sigmoid‐weighted average of the rewards.  This scalar ignores instability of the curve.  In Deep RL it is common that a hyper-parameter setting reaches a high reward but with large oscillations – such settings are often unreliable at test time.  Because the GP sees no penalty for instability it may keep sampling such noisy settings, wasting evaluations and slowing convergence.",
-    "Methods": "Stability–Aware Curve Compression (SACC).\nModification to BOIL: after computing the sigmoid–weighted average m(curve) we subtract a stability penalty proportional to the standard deviation of the last K% of the curve.\n    score = m(curve) – λ · std(curve[ -K: ])\nOnly three extra lines are needed inside apply_one_transform_logistic.  λ ≥ 0 is an additional scalar hyper-parameter that is learned together with the sigmoid midpoint and growth by maximising the GP log-marginal likelihood (just append λ to the vector that is optimised).\nMotivation:   std(curve_tail) is an inexpensive proxy for reliability; subtracting it keeps the objective one-dimensional so BOIL’s GP, acquisition function and data-augmentation remain untouched.",
-    "Experimental Setup": "Task: tune learning rate and target-network update period of a DQN agent on CartPole-v0.\nBaselines: (1) Original BOIL, (2) BOIL+SACC (ours).\nBudget: 25 BO iterations, 5 random initial points.\nK: last 10 % of episodes, λ initialised to 1.0 with bounds [0,5].\nMetrics:\n  • Best validation reward after 25 evaluations.\n  • Number of evaluations required to reach an average reward ≥ 195.\n  • Post-training stability: std of reward over 20 extra evaluation episodes.\nSame random seeds are used for both methods.",
-    "Experimental Code": "import numpy as np\n\ndef transform_logistic_sacc(curve, midpoint, growth, max_ep, lam=1.0, tail_frac=0.1):\n    # original sigmoid weighting\n    x_scaled = np.linspace(-6, 6, len(curve))\n    weights = 1/(1+np.exp(-growth*(x_scaled-midpoint)))\n    m = np.mean(curve*weights)\n    # stability penalty (std of last K% of curve)\n    k = max(1, int(len(curve)*tail_frac))\n    stability = np.std(curve[-k:])\n    return m - lam*stability\n\n# drop-in replacement inside BOIL\n# in apply_one_transform_logistic simply call transform_logistic_sacc with lam learned from GP\n",
-    "Expected Result": "Across 10 independent runs the proposed BOIL+SACC is expected to:\n  • Reach the success threshold (avg reward 195) after ≈12 evaluations versus ≈17 for BOIL.\n  • Achieve ~5-10 % higher best-of-run reward.\n  • Produce policies whose evaluation-phase reward std is roughly 30 % lower than those from vanilla BOIL, showing better stability.",
-    "Expected Conclusion": "Penalising late-phase reward variability with one extra term guides BOIL away from hyper-parameters that merely spike in performance, concentrating budget on genuinely robust settings.  The change touches only the curve-compression function, keeps BOIL’s remaining machinery intact, adds one learnable scalar, and empirically yields faster and more reliable hyper-parameter optimisation."
+    "Open Problems": "ρBYOL and most contrastive/self-distillation methods pick two random temporal crops from the same clip and force their representations to match equally, no matter whether the crops are 1 frame or 3 s apart. On rapidly changing rodent behaviour this causes:\n1) Positive pairs that are too far apart in time to depict the same action, blurring fine-grained motion cues.\n2) Weak ordering of the latent space with respect to temporal distance, which hurts downstream behaviour segmentation and rare-action recognition.\nA fix that does not require new architectures is to make the objective aware of the temporal distance between the two views.",
+    "Methods": "Time-Weighted BYOL (TW-BYOL)\nMinimal change: multiply BYOL’s mean-squared error loss between the online and target projections by an exponential weight that decays with frame distance Δt between the two augmented views.\nL_TW = w(Δt) * || q( f_θ( v_i ) ) – stop_grad( f_ϕ( v_j ) ) ||² ,  \nwith w(Δt)=exp(-Δt / τ) and a single hyper-parameter τ (e.g. 30 frames).\nTheoretical motivation: For small Δt the two views are likely to be the same action, so the model should align them strongly; for large Δt alignment is weakened, allowing the network to separate different actions and preserve temporal information. The weighting acts as a soft regulariser imposing temporal locality without introducing extra negatives or additional networks.",
+    "Experimental Setup": "Dataset: MABe22 mice-triplet videos (video modality only).\nTraining: reproduce original ρBYOL recipe (SlowFast-8×8 backbone, same augmentations) and TW-BYOL (identical but with the weighted loss).\nHyper-parameter sweep: τ ∈ {15, 30, 60} frames.\nEvaluation: linear probe F1 on the 8 hidden downstream mice tasks; report mean and per-task scores.\nBaseline: official ρBYOL numbers from MABe22 leaderboard.\nCompute: 4×A100 GPUs, 50 epochs (same as baseline).",
+    "Experimental Code": "# only loss change shown\nimport torch, math\n\ndef time_weighted_byol_loss(p_online, z_target, frame_dist, tau=30.):\n    \"\"\"p_online and z_target: (B,D) tensors; frame_dist: (B,) ints\"\"\"\n    weight = torch.exp(-frame_dist.float() / tau).to(p_online.device)  # (B,)\n    loss = (p_online - z_target.detach()).pow(2).sum(dim=1)  # (B,)\n    weighted_loss = (weight * loss).mean()\n    return weighted_loss\n\n# inside training loop\np = projector_online(backbone_online(view_i))      # (B,D)\nz = projector_target(backbone_target(view_j))      # (B,D)\nframe_dist = torch.abs(frame_idx_i - frame_idx_j)  # (B,)\nloss = time_weighted_byol_loss(p, z, frame_dist, tau=30)",
+    "Expected Result": "Across three random seeds the mean F1 on the mice tasks is expected to rise by ~2-3 points (e.g. ρBYOL 68.5 → TW-BYOL 71.0). Improvements should be largest on tasks requiring discrimination of short, bursty actions (e.g. grooming vs sniffing) while remaining neutral on slowly varying experimental condition classification.",
+    "Expected Conclusion": "A single, two-line weighting term makes the self-distillation objective respect temporal locality, sharpening representations for fast rodent behaviours. Because no extra negatives, memory, or architectural changes are introduced, the method keeps BYOL’s simplicity and training speed while delivering measurable accuracy gains on fine-grained behaviour annotation tasks."
 }
 
 # Experiment Strategy
-Overall Objective
-Design a single, modular validation protocol that can be reused on every experiment (Cart-Pole → Atari → MuJoCo, small → large HP spaces, low → high reward noise) to prove that Stability-Aware Curve Compression (SACC) brings (1) faster convergence, (2) higher ultimate performance, (3) greater policy reliability, (4) negligible overhead, and (5) good generalization across tasks and search regimes.
+Global Goal
+Prove that the proposed Time-Weighted BYOL (TW-BYOL) yields temporally better-ordered, more behaviour-discriminative and equally efficient video representations than existing self-supervised alternatives, while remaining robust to hyper-parameter choices and generalising across rodent datasets.
 
-I. Core Hypotheses To Validate
-1. Sample-efficiency: BOIL+SACC requires fewer BO evaluations to reach a target performance.
-2. Performance ceiling: BOIL+SACC attains a higher best-of-run return than baselines.
-3. Stability / robustness:
-   a. Training stability – learning curves show less oscillation.
-   b. Evaluation stability – final policy reward std is lower.
-4. Computational cost: wall-clock and GPU hours are not significantly higher than vanilla BOIL.
-5. Generalization: the λ learned by GP adapts automatically to a variety of reward scales and noise levels without retuning.
+1. Core Hypotheses to Validate
+   H1 – Performance: TW-BYOL improves downstream behaviour recognition (overall F1, rare-action recall, few-shot transfer).
+   H2 – Temporal Awareness: embeddings respect temporal proximity (distance in latent space grows with frame gap).
+   H3 – Efficiency: training speed, GPU memory and wall-clock cost stay within ±5 % of ρBYOL.
+   H4 – Robustness: gains hold under different τ values, random seeds, crop strategies and limited labelled data.
+   H5 – Generalisation: improvements transfer to unseen rodents/tasks and to a second behaviour dataset.
 
-II. Comparison Matrix (applied in every experiment)
-A. Baselines
-   • Vanilla BOIL (identical surrogate, no penalty)
-   • BOIL with human-set λ (constant, no learning) – ablation
-   • Alternative curve compressors (e.g., simple last-N averaging, BOIL-MAX) – sanity check
-   • External state-of-the-art HPO: ASHA, TPE – competitive bar
-B. Ablations / Sensitivity
-   1. Vary tail fraction K and observe effect.
-   2. Optimizer without λ in GP vector (λ fixed to 0) – isolates impact of learning λ.
-C. Stress Settings
-   • High-variance environment (stochastic CartPole, randomized seeds)
-   • Large search space (add optimizer momentum, epsilon, etc.)
+2. Comparative Framework
+   a. Baseline: reproduced ρBYOL recipe.
+   b. State-of-the-art self-supervised video baselines: MoCo-v3, SimCLR-v2, TimeContrast.
+   c. Supervised upper bound: same backbone trained with full labels (for context only).
+   d. Ablations:
+      • No weighting (ρBYOL loss) – “Uniform”.
+      • Hard cut-off weighting – “Binary”.
+      • Alternative decays (linear, inverse square) to test the importance of exponential form.
+      • τ sweep (15, 30, 60 frames).
 
-III. Evaluation Angles & Metrics (recorded for every run)
-1. Quantitative
-   a. Best validation reward vs #evaluations curve (primary) – Area-Under-Curve
-   b. Time-to-threshold (first hit of task-specific success)
-   c. Final policy test reward mean ± std over 30 episodes
-   d. Std of last K% training rewards (same K for fairness)
-   e. CPU/GPU time & memory footprint (profiling hooks)
-2. Qualitative
-   a. Plot learning curves of representative runs (median, 25/75 percentile shading)
-   b. Acquisition trajectories – how λ evolves, sample dispersion
-3. Statistical Validation
-   • 10 independent seeds per setting
-   • Report mean, 95% CI; use paired t-tests or Wilcoxon on matched seeds
-   • Success criterion: BOIL+SACC beats every baseline on at least 3/4 primary metrics with p<0.05.
+3. Experimental Angles
+   3.1 Quantitative Performance
+       • Linear-probe F1 per task and averaged (primary metric).
+       • k-NN accuracy (label-free evaluation of representation quality).
+       • Rare-action recall (top-20 % least frequent labels).
+   3.2 Temporal Locality Analysis
+       • Spearman correlation ρ between embedding distance and frame gap Δt.
+       • Temporal retrieval: mean reciprocal rank when querying a frame for its 5 nearest temporal neighbours.
+   3.3 Efficiency Metrics
+       • GPU hours per pre-training run.
+       • Samples / sec and peak VRAM.
+   3.4 Qualitative
+       • t-SNE / UMAP plots coloured by action and by timestamp.
+       • Video retrieval demos.
+   3.5 Robustness & Generalisation
+       • Sensitivity curves over τ and crop policies.
+       • Subset-of-data training (25 %, 50 % of unlabelled video) to test data efficiency.
+       • Cross-dataset transfer: pre-train on MABe22, evaluate on a second rodent-behaviour set (e.g., RatSI).
 
-IV. Experimental Procedure (identical template)
-Step 1: Fix task-specific success threshold & search space.
-Step 2: Generate identical initial random design for all methods.
-Step 3: Run BO for B iterations (budget fixed across methods) logging full learning curve at each eval.
-Step 4: After BO terminates, retrain best hyper-params for T extra episodes, collect evaluation stats.
-Step 5: Aggregate across seeds, compute metrics, statistical tests, produce plots & cost table.
+4. Validation Criteria for Success
+   Pass if ALL are met:
+   • +2 F1 absolute (≥ p<0.05, paired t-test over 3 seeds) versus ρBYOL on mean of 8 tasks.
+   • At least 6/8 tasks individually improve or remain equal.
+   • Embedding–time correlation improves by ≥10 % over ρBYOL.
+   • GPU hours increase ≤5 %.
+   • Variance of F1 across seeds not higher than ρBYOL.
+   • Improvements persist (≥75 % retained) when τ∈[15,60] or when only 50 % of unlabelled video is available.
 
-V. Resource & Reproducibility Controls
-• All runs limited to 1×A100; concurrency chosen so peak VRAM ≤80 GB and RAM ≤2 TB.
-• Deterministic CuDNN + fixed numpy/PyTorch seeds stored.
-• Codebase uses the same call-paths; SACC flag toggles extra 3-line penalty.
-• Auto-logging: JSON + TensorBoard + csv for downstream analysis scripts.
+5. Experimental Protocol
+   • Hardware: up to 4×A100 80 GB per run; mixed-precision training; identical data-loading pipeline for all methods.
+   • Controlled compute: fix batch size, epochs (50), optimiser and augmentation suite; record seeds.
+   • Run each configuration 3× for statistics.
+   • Hyper-parameter grid executed with identical wall-clock budget; schedule runs via SLURM to exploit 2 TB RAM node.
+   • Evaluation code placed in a separate repo; blind-test labels kept hidden until final metrics are logged to ensure fairness.
 
-VI. Success Criteria for the Whole Study
-The method will be declared effective if, on a diverse benchmark suite (≥3 tasks, ≥2 noise regimes), it consistently:
-1. Reduces evaluations-to-threshold by ≥20 % on average.
-2. Improves best-of-run reward by ≥5 % on ≥70 % of tasks.
-3. Cuts evaluation-phase reward std by ≥25 %.
-4. Adds <2 % overhead in wall-clock time.
-5. Shows no catastrophic regressions relative to any baseline.
+6. Multi-Perspective Demonstration Strategy
+   a. Start with baseline vs TW-BYOL to establish headline gains.
+   b. Add ablation study to attribute gains specifically to exponential weighting and to choice of τ.
+   c. Compare against external SOTA to position method in field.
+   d. Present temporal locality analyses to back mechanistic claim.
+   e. Provide efficiency table to show “no free lunch” avoided.
+   f. Show robustness curves and cross-dataset transfer to argue for broad applicability.
 
-This unified strategy ensures every forthcoming experiment follows a consistent, statistically sound, and multi-angle protocol, providing compelling evidence for SACC’s benefits while remaining practical within the available computational environment.
+This unified strategy will be executed for every subsequent experiment, ensuring that each study supplies comparable evidence along performance, temporal fidelity, efficiency, robustness and generalisation axes while sharing compute budgets and evaluation protocols across the research programme.
 
 ---
 
@@ -144,38 +146,34 @@ Output:
 {
     "experiments": [
         {
-            "experiment_id": "exp-1-main-performance",
+            "experiment_id": "exp-main-perf-ablation",
             "run_variations": [
-                "boil",
-                "boil+sacc",
-                "boil+sacc-fixedλ",
-                "last10-average",
-                "asha"
+                "rhoBYOL-uniform",
+                "TW-BYOL-tau15",
+                "TW-BYOL-tau30",
+                "TW-BYOL-tau60",
+                "TW-BYOL-binary-cutoff"
             ],
-            "description": "Objective / Hypothesis: Quantitatively verify that the Stability-Aware Curve Compression (SACC) term accelerates hyper-parameter optimisation and improves final policy quality on classic discrete-action control tasks, while introducing negligible overhead.  We additionally include a fixed-λ ablation and an alternative curve compressor to isolate the effect of learning λ, and compare against a band-popular early-stopping HPO method (ASHA) to set a competitive bar.\n\nTasks (treated as datasets): CartPole-v1, LunarLander-v2, Acrobot-v1.\n\nModels / RL agents:\n• Deep Q-Network (DQN, 2-layer MLP 128-128, ReLU) — identical architecture for all variations.\n• Gaussian-Process surrogate with Matérn-5/2 kernel (GPyTorch) for all BO methods.\n\nSearch space: learning-rate∈[1e-5,1e-2] (log), target-network update τ∈[100,2000], exploration ε_final∈[0.01,0.2].  5 random initial points + 25 BO evaluations.\n\nPre-processing: rewards normalised to [0,1] per task for surrogate stability; observation features left untouched.\n\nData split: each evaluation = full 500-episode training run; last 10 % of episodes held out for stability penalty.  Post-optimisation we retrain the best HPs for 30k additional frames and test over 30 episodes.\n\nSeeds / repetitions: 10 independent seeds.  Report mean ±95 % CI; paired t-test vs vanilla BOIL.\n\nMetrics:\nPrimary –\n1) Evaluations-to-threshold (≥195 CartPole, ≥200 LunarLander, ≤−100 Acrobot),\n2) Best validation reward after 25 evaluations.\nSecondary –\n3) Std of reward in last 50 training episodes,\n4) Test-phase reward mean±std,\n5) Wall-clock time & GPU hours.\n\nHyper-parameter analysis: grid over λ∈{0,0.5,1,2,4} for “boil+sacc-fixedλ”.  Visualise λ learned by GP across iterations.\n\nRobustness checks: repeat CartPole with sticky-actions (0.25) noise; measure change in rankings.\n\nEfficiency measures: torch.profiler hooks compute forward/backward FLOPs, peak VRAM.  Time recorded via Python time.perf_counter().  Should add <2 % overhead relative to vanilla BOIL.\n\nExample code excerpt:\n\"\"\"python\nfor hp_cfg in candidate_cfgs:\n    curve = run_dqn(env, hp_cfg, seed)\n    score = transform_logistic_sacc(curve, mid, growth, lam) if variant=='boil+sacc' else other_compress(curve)\n    gp.update(hp_cfg, score)\n\"\"\"\n\nExpected outcome: BOIL+SACC beats all baselines on ≥3/4 primary metrics with p<0.05 and keeps runtime within 1.5 % of vanilla BOIL."
+            "description": "Objective / Hypothesis: Quantitatively demonstrate that the proposed exponential time–weighted loss (TW-BYOL) yields higher behaviour-recognition performance and stronger temporal ordering than the original ρBYOL, and that these gains are attributable to the weighting scheme rather than chance. The experiment also positions TW-BYOL against a strong non-BYOL baseline (MoCo-v3) while keeping backbone, data pipeline and compute identical.\n\nModels\n• SlowFast-8×8 backbone for all BYOL variants.  \n• ResNet-50 + MoCo-v3 (image→video adaptation via clip-level averaging) for an external SSL baseline.\n\nDatasets\n• MABe22 mice-triplet videos (RGB, 1024×512). 30-frame clips at 15 fps.  \nData split: official train/val/test (70 / 15 / 15 %). Cross-validation not used to keep GPU budget manageable.\n\nPre-processing\n• Random spatial crop (80–100 %), horizontal flip, colour jitter, grayscale, Gaussian blur.  \n• Two temporal crops: sample starting indices i,j; frame gap Δt recorded to compute weight.  \n• Clips are normalised with per-channel dataset mean/σ.\n\nTraining Protocol\n• 50 epochs, batch = 64 clips/GPU, AdamW (lr = 3e-4, cosine decay).  \n• 3 random seeds per variation (total 15 BYOL + 3 MoCo runs).  \n• Online/target momentum 0.996; projector MLP 2048→256.\n\nEvaluation\n1. Linear probe: train a single-layer logistic classifier on frozen features (20 epochs, lr = 0.1, SGD) – Primary metric: macro-F1.  \n2. k-NN (k = 20) accuracy – secondary.  \n3. Temporal locality: Spearman ρ between ‖z_t − z_{t+Δt}‖₂ and Δt on 10 K sampled pairs.  \n4. Efficiency: GPU hours, peak VRAM, throughput (clips/s), measured with PyTorch profiler.\n\nHyper-parameter Analysis\n• τ is swept implicitly via variations.  \n• For each seed, save F1 vs epoch to detect early/late overfitting.  \n• Learning-rate restart at 80 % of training to test stability (single pilot run).\n\nRobustness Checks\n• Inject 5 % salt-and-pepper noise into 10 % of frames during evaluation; record ΔF1.  \n• Distribution shift: evaluate on night-vision subset (4 % of test videos) unseen during training.\n\nSuccess Criteria (linked to H1–H3)\n• TW-BYOL-tau30 ≥ +2 F1 over ρBYOL (p < 0.05 paired t-test across seeds).  \n• ρ(embedding-distance,Δt) ≥ +10 % over ρBYOL.  \n• GPU hours within +5 % of baseline.\n\nExample Code Snippet (abbreviated)\n```python\nfor clips, frame_idxs in loader:      # clips: (B,3,T,H,W)\n    (v_i,v_j), Δt = temporal_augment(clips, frame_idxs)\n    p = online_proj(online_backbone(v_i))\n    z = target_proj(target_backbone(v_j))\n    loss = time_weighted_byol_loss(p, z, Δt, tau=args.tau)\n```\n\nOutputs stored per run in exp-main-perf-ablation/<variation>/<seed>/ with JSON logs for automated aggregation."
         },
         {
-            "experiment_id": "exp-2-robustness-efficiency",
+            "experiment_id": "exp-robustness-transfer-efficiency",
             "run_variations": [
-                "boil",
-                "boil+sacc",
-                "boil+sacc-tail0.2",
-                "tpe"
+                "rhoBYOL-full",
+                "TW-BYOL-tau30-full",
+                "TW-BYOL-tau30-half-unlabelled",
+                "TW-BYOL-tau30-crop-jitter"
             ],
-            "description": "Objective / Hypothesis: Stress-test SACC under high-variance, continuous-action environments and a larger hyper-parameter search space, evaluating robustness to reward noise, sensitivity to tail-fraction K, and computational efficiency.\n\nTasks (datasets): Hopper-v3, HalfCheetah-v3 (MuJoCo) plus Stochastic-CartPole (sticky-actions 0.5).\n\nModels:\n• Proximal Policy Optimisation (PPO, 3-layer MLP 256-256-128, tanh) for MuJoCo tasks.\n• DQN for Stochastic-CartPole (architecture as in exp-1).\n\nSearch space (7 D): learning-rate, γ, GAE-λ, clip-ε, entropy-coef, batch-size, target-network update (DQN only).  Same 5 initial random points + 40 BO evaluations (budget ↑ because space larger).\n\nPre-processing: reward clipping (±10) for MuJoCo, min-max scaling to [0,1] before GP fit.  Observations standardised online with running mean/var.\n\nData split & evaluation: 1 training episode = 1 M environment steps (MuJoCo) or 500 episodes (CartPole).  Stability measured over last 5 % of steps.  After HPO, retrain best HPs for 3 M steps, evaluate over 50 episodes.\n\nSeeds / repetitions: 8 seeds due to longer runs; statistics via Wilcoxon signed-rank.\n\nMetrics:\nPrimary –\n1) AU-Curve of best validation return vs evaluations,\n2) Time-to-threshold (≥3500 Hopper, ≥9000 HalfCheetah, ≥195 Stoch-CartPole),\n3) Test-phase reward std.\nSecondary – FLOPs/step, VRAM, wall-clock per evaluation, λ trajectory plots.\n\nHyper-parameter sensitivity: compare tail_frac=0.1 vs 0.2 (run_variation \"boil+sacc-tail0.2\"); sweep shown in appendix.\n\nRobustness analyses:\n• Noise injection: add Gaussian noise N(0,0.1) to rewards during training and re-evaluate.\n• OOD shift: retrain best HPs on modified gravity (MuJoCo +10 %).  Measure performance drop.\n• Adversarial perturbation (Fast Gradient Sign) on CartPole observations during evaluation; compute worst-case reward.\n\nComputational efficiency tracking: PyTorch profiler for FLOPs; nvidia-smi logging every 10 s for memory; shared script writes csv.\n\nExample code snippet:\n\"\"\"bash\npython run_hpo.py \\\n  --algo PPO \\\n  --method boil+sacc \\\n  --env Hopper-v3 \\\n  --budget 40 \\\n  --tail_frac 0.2 \\\n  --log_dir logs/exp2/hopper/seed${SEED}\n\"\"\"\n\nExpected outcome: BOIL+SACC maintains ≥20 % fewer evaluations-to-threshold and ≥25 % lower test-reward std under all stress settings, while adding ≤2 % compute cost.  Tail-fraction 0.2 shows slightly stronger stability but similar sample-efficiency, confirming moderate sensitivity."
+            "description": "Objective / Hypothesis: Validate TW-BYOL’s robustness to data quantity, augmentation policy and domain shift, and verify that training/inference efficiency remains on par with ρBYOL while generalising to a second rodent dataset (RatSI). Addresses H4–H5.\n\nModels\n• SlowFast-8×8 backbone for all runs to isolate effects of data/augmentations.  \n• Supervised upper bound (SlowFast-8×8 trained with labels) evaluated once for context, not part of variations.\n\nDatasets & Domain Transfer\n• Pre-train on MABe22 for all variations:\n  – full (100 % unlabelled) or half (50 %) subsets as per run_variations.\n• Cross-dataset evaluation: Frozen features tested on RatSI (rat social-interaction)  → linear probe F1.\n• Both datasets pre-processed identically: 32-frame, 224² spatial resolution, same augmentations.\n\nVariation Details\n1. rhoBYOL-full – baseline.\n2. TW-BYOL-tau30-full – default method.\n3. TW-BYOL-tau30-half-unlabelled – unsupervised data reduced to 50 % to test data-efficiency.\n4. TW-BYOL-tau30-crop-jitter – temporal crop strategy changed to uniform ±5 frames jitter (instead of random any-frame) to test robustness to view sampling.\n\nTraining & Repetition\n• As in exp-1 otherwise; 3 seeds each (total 12 runs).  \n• Early stopping on validation F1 with patience = 5 epochs to mimic real-world training budget cuts.\n\nEvaluation Metrics\nPrimary: macro-F1 on MABe22 tasks and on RatSI transfer.  \nSecondary: rare-action recall, temporal MRR for neighbour retrieval, and equality of efficiency (GPU h, VRAM, wall-clock).  \nCalibration: Brier score on linear probe outputs.\n\nRobustness / Stress Tests\n• Gaussian noise σ = 0.05 added to 20 % of test clips.  \n• Frame-drop OOD shift: randomly delete 30 % frames and re-interpolate; re-evaluate F1.\n• Adversarial PGD (ε = 2/255, 3 steps) on 128 random clips; report ΔF1.\n\nHyper-parameter Sensitivity\n• For TW-BYOL-crop-jitter run, τ swept inline (15, 30, 60) on reduced 10-epoch jobs to plot F1 vs τ curve (not counted in main variations; auxiliary grid re-uses checkpoints).\n\nEfficiency Accounting\n• FLOPs measured with fvcore; memory via torch.cuda.max_memory_allocated(); inference latency over 256-clip batches. Acceptable increase threshold: ≤1.05× of baseline.\n\nSuccess Criteria\n• TW-BYOL-tau30-full retains ≥75 % of F1 gain when only 50 % unlabelled data is available.  \n• Under crop-jitter, F1 drop ≤1 pt.  \n• Cross-dataset transfer: ≥+1.5 F1 vs ρBYOL.  \n• Efficiency deltas within ±5 %.\n\nExample Code Snippet (data subset logic)\n```python\nif args.data_fraction < 1.0:\n    train_indices = random.sample(full_indices, int(len(full_indices)*args.data_fraction))\n    train_dataset = torch.utils.data.Subset(full_dataset, train_indices)\n```\n\nAll logs + profiler traces pushed to branch `exp-robustness-transfer-efficiency` for reproducibility."
         }
     ],
     "expected_models": [
-        "DQN",
-        "PPO",
-        "GaussianProcessSurrogate"
+        "SlowFast-8×8",
+        "ResNet-50",
+        "ViT-B/16"
     ],
     "expected_datasets": [
-        "CartPole-v1",
-        "LunarLander-v2",
-        "Acrobot-v1",
-        "Stochastic-CartPole",
-        "Hopper-v3",
-        "HalfCheetah-v3"
+        "MABe22",
+        "RatSI"
     ]
 }
