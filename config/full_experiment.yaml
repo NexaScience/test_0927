@@ -1,0 +1,136 @@
+# Full experiment – exp-robustness-transfer-efficiency
+# Four run variations: ρBYOL baseline + three TW-BYOL variants.
+
+experiments:
+  # ----------------------------------------------------------------------
+  - run_id: rhoBYOL-full
+    description: |
+      Baseline ρBYOL reproduction with the pseudo SlowFast-8×8 backbone on the
+      full CIFAR-10 dataset.
+    seed: 42
+
+    dataset:
+      name: cifar10
+      params:
+        clip_len: 8
+        data_fraction: 1.0  # full data
+
+    model:
+      type: slowfast_8x8
+      proj_hidden_dim: 4096
+      proj_output_dim: 256
+
+    algorithm:
+      type: BYOL
+      ema_decay: 0.996
+      mixed_precision: true
+      params: {}
+
+    training:
+      epochs: 10
+      batch_size: 64
+      learning_rate: 1e-3
+
+  # ----------------------------------------------------------------------
+  - run_id: TW-BYOL-tau30-full
+    description: |
+      Proposed Time-Weighted BYOL using τ = 30, trained on 100 % of data.
+    seed: 43
+
+    dataset:
+      name: cifar10
+      params:
+        clip_len: 8
+        data_fraction: 1.0
+
+    model:
+      type: slowfast_8x8
+      proj_hidden_dim: 4096
+      proj_output_dim: 256
+
+    algorithm:
+      type: TW-BYOL
+      ema_decay: 0.996
+      mixed_precision: true
+      params:
+        tau: 30
+
+    training:
+      epochs: 10
+      batch_size: 64
+      learning_rate: 1e-3
+
+  # ----------------------------------------------------------------------
+  - run_id: TW-BYOL-tau30-half-unlabelled
+    description: |
+      TW-BYOL with τ = 30 on a 50 % random subset of the data to test
+      data-efficiency.
+    seed: 44
+
+    dataset:
+      name: cifar10
+      params:
+        clip_len: 8
+        data_fraction: 0.5  # half of the training data
+
+    model:
+      type: slowfast_8x8
+      proj_hidden_dim: 4096
+      proj_output_dim: 256
+
+    algorithm:
+      type: TW-BYOL
+      ema_decay: 0.996
+      mixed_precision: true
+      params:
+        tau: 30
+
+    training:
+      epochs: 10
+      batch_size: 64
+      learning_rate: 1e-3
+
+  # ----------------------------------------------------------------------
+  - run_id: TW-BYOL-tau30-crop-jitter
+    description: |
+      TW-BYOL with τ = 30 where the two views are sampled with a small temporal
+      crop-jitter (≤ 5 frames) to assess robustness to the view-sampling policy.
+    seed: 45
+
+    dataset:
+      name: cifar10
+      params:
+        clip_len: 8
+        data_fraction: 1.0
+        crop_jitter: true   # enables ±5 frame distance sampling
+
+    model:
+      type: slowfast_8x8
+      proj_hidden_dim: 4096
+      proj_output_dim: 256
+
+    algorithm:
+      type: TW-BYOL
+      ema_decay: 0.996
+      mixed_precision: true
+      params:
+        tau: 30
+
+    training:
+      epochs: 10
+      batch_size: 64
+      learning_rate: 1e-3
+  # ----------------------------------------------------------------------
+
+# Notes
+# -----
+# 1. Epochs have been reduced from 50 → 10 to keep the example runnable on a
+#    single GPU within a reasonable timeframe while still exercising the full
+#    training loop.
+# 2. The dataset choice (CIFAR-10) substitutes MABe22 for demonstration
+#    purposes; swapping in a proper video dataset only requires editing the
+#    *dataset* section above.
+# 3. All other hyper-parameters (optimizer, EMA decay, etc.) follow the recipe
+#    described in the paper.
+
+# End of file

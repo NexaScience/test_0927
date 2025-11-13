@@ -1,0 +1,57 @@
+# Smoke test configuration – light & fast to verify the full pipeline end-to-end
+experiments:
+  - run_id: smoke_rhoBYOL
+    description: |
+      Smoke-test baseline ρBYOL (standard BYOL) on CIFAR-10 using the lightweight
+      pseudo SlowFast-8×8 backbone. Runs for 1 epoch only.
+    seed: 123
+
+    dataset:
+      name: cifar10
+      params:
+        clip_len: 8
+        data_fraction: 0.05   # use only 5 % of data to keep CI fast
+
+    model:
+      type: slowfast_8x8
+      proj_hidden_dim: 512
+      proj_output_dim: 128
+
+    algorithm:
+      type: BYOL
+      ema_decay: 0.996
+      mixed_precision: true
+      params: {}
+
+    training:
+      epochs: 1
+      batch_size: 8
+      learning_rate: 1e-3
+
+  - run_id: smoke_TWBYOL_tau30
+    description: |
+      Smoke-test TW-BYOL with τ = 30 on the same tiny CIFAR-10 subset.
+    seed: 123
+
+    dataset:
+      name: cifar10
+      params:
+        clip_len: 8
+        data_fraction: 0.05
+
+    model:
+      type: slowfast_8x8
+      proj_hidden_dim: 512
+      proj_output_dim: 128
+
+    algorithm:
+      type: TW-BYOL
+      ema_decay: 0.996
+      mixed_precision: true
+      params:
+        tau: 30
+
+    training:
+      epochs: 1
+      batch_size: 8
+      learning_rate: 1e-3
